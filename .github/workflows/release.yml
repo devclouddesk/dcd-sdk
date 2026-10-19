@@ -23,7 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -50,8 +49,6 @@ jobs:
     name: Publish to PyPI (dcd-storage-client)
     if: github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'pypi'
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -69,8 +66,9 @@ jobs:
           cd python
           python -m build
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: python/dist/
-          password: ${{ secrets.PYPI_API_TOKEN }}
+      - name: Publish to PyPI via Twine
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          twine upload python/dist/* --non-interactive --skip-existing
