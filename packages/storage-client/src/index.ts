@@ -7,6 +7,13 @@ export {
   MediaClient,
   createMediaClient,
 } from './client.js';
+export {
+  DCDStorageError,
+  AuthenticationError,
+  NotFoundError,
+  PayloadTooLargeError,
+  UploadError,
+} from './errors.js';
 export type {
   AssetResult,
   StorageAssetResult,
@@ -18,4 +25,11 @@ export type {
   MediaClientConfig,
   TransformationOptions,
   UploadOptions,
+  SignUploadOptions,
+  SignedUploadResult,
+  FileListOptions,
+  FileListResult,
+  Pagination,
+  ServerStats,
+  HealthCheckResult,
 } from './types.js';

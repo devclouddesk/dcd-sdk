@@ -1,11 +1,13 @@
 # 🛠️ DevCloudDesk SDK Monorepo (`dcd-sdk`)
 
+[![CI & Test Suite](https://github.com/devclouddesk/dcd-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/devclouddesk/dcd-sdk/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![NPM Version](https://img.shields.io/npm/v/@dcd-sdk/storage-client?color=blue&label=%40dcd-sdk%2Fstorage-client)](https://www.npmjs.com/package/@dcd-sdk/storage-client)
+[![PyPI Version](https://img.shields.io/pypi/v/dcd-storage-client?color=blue&label=dcd-storage-client)](https://pypi.org/project/dcd-storage-client/)
 
 Official multi-language client libraries and developer tools for [DevCloudDesk](https://devclouddesk.com).
 
-This repository is maintained as a monorepo containing official SDKs for Node.js, TypeScript, and Python.
+This repository is maintained as a unified monorepo containing production-ready, enterprise-grade SDKs for Node.js, TypeScript, and Python.
 
 ---
 
@@ -35,7 +37,7 @@ const bucket = createBucketClient({
   apiKey: process.env.DCD_STORAGE_API_KEY,
 });
 
-// Upload asset
+// Upload asset (Buffer, File, Blob, or file path)
 const result = await bucket.upload(fileBuffer, {
   folder: 'avatars',
   filename: 'user.png',
@@ -67,7 +69,7 @@ bucket = BucketClient(
     api_key=os.environ.get("DCD_STORAGE_API_KEY"),
 )
 
-# Upload asset
+# Upload asset (bytes, file-like object, or filepath)
 asset = bucket.upload("./banner.png", folder="marketing")
 
 # Dynamic transformation URL
@@ -83,12 +85,17 @@ dcd-sdk/
 ├── packages/
 │   └── storage-client/        # TypeScript & Node.js client (@dcd-sdk/storage-client)
 │       ├── src/
+│       ├── test/
 │       ├── package.json
 │       └── tsconfig.json
 ├── python/                    # Python package (dcd-storage-client)
 │   ├── dcd_storage_client/
+│   ├── tests/
 │   └── pyproject.toml
+├── .github/workflows/         # CI/CD test and release pipelines
 ├── package.json               # Root monorepo workspace
+├── CONTRIBUTING.md            # Contributor guide
+├── SECURITY.md                # Security policy
 └── README.md
 ```
 

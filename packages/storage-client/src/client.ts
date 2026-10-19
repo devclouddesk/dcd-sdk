@@ -1,6 +1,17 @@
 import { TransformationBuilder } from './builder.js';
+import {
+  AuthenticationError,
+  DCDStorageError,
+  NotFoundError,
+  PayloadTooLargeError,
+  UploadError,
+} from './errors.js';
 import type {
   AssetResult,
+  FileListOptions,
+  FileListResult,
+  HealthCheckResult,
+  ServerStats,
   SignedUploadResult,
   SignUploadOptions,
   StorageClientConfig,
@@ -10,20 +21,69 @@ import type {
 export class StorageClient {
   private endpoint: string;
   private apiKey: string;
+  private defaultTimeoutMs: number;
 
   constructor(config: StorageClientConfig) {
-    if (!config.endpoint) {
+    if (!config || !config.endpoint) {
       throw new Error('StorageClient: endpoint is required');
     }
     this.endpoint = config.endpoint.replace(/\/+$/, '');
     this.apiKey = (config.apiKey || '').trim();
+    this.defaultTimeoutMs = config.timeoutMs || 30000;
   }
 
   /**
-   * Initializes a fluent URL builder for the specified asset public ID
+   * Initializes a fluent URL builder for on-the-fly CDN image transformations
    */
   url(publicId: string): TransformationBuilder {
     return new TransformationBuilder(this.endpoint, publicId);
+  }
+
+  /**
+   * Checks the health and connectivity of the storage engine server
+   */
+  async healthCheck(): Promise<HealthCheckResult> {
+    const healthUrl = `${this.endpoint}/health`;
+    try {
+      const response = await this.fetchWithTimeout(healthUrl, { method: 'GET' });
+      if (!response.ok) {
+        return { status: 'error' };
+      }
+      return await response.json();
+    } catch {
+      return { status: 'error' };
+    }
+  }
+
+  /**
+   * Retrieves server performance, storage, and cache statistics (requires authorized API key)
+   */
+  async getStats(): Promise<ServerStats> {
+    const statsUrl = `${this.endpoint}/v1/admin/stats`;
+    const response = await this.fetchWithTimeout(statsUrl, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+
+    const data = await this.parseJsonResponse(response);
+    return data.stats;
+  }
+
+  /**
+   * Lists files in the storage cluster with pagination and optional folder filter
+   */
+  async listFiles(options: FileListOptions = {}): Promise<FileListResult> {
+    const url = new URL(`${this.endpoint}/v1/admin/files`);
+    if (options.page) url.searchParams.set('page', String(options.page));
+    if (options.limit) url.searchParams.set('limit', String(options.limit));
+    if (options.folder) url.searchParams.set('folder', options.folder);
+
+    const response = await this.fetchWithTimeout(url.toString(), {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+
+    return await this.parseJsonResponse(response);
   }
 
   /**
@@ -32,31 +92,30 @@ export class StorageClient {
    */
   async createSignedUploadToken(options: SignUploadOptions = {}): Promise<SignedUploadResult> {
     if (!this.apiKey) {
-      throw new Error('StorageClient: API key is required on backend to generate signed upload tokens.');
+      throw new AuthenticationError('API key is required on backend to generate signed upload tokens.');
     }
 
     const signUrl = `${this.endpoint}/v1/upload/sign`;
-    const response = await fetch(signUrl, {
+    const response = await this.fetchWithTimeout(signUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
+        ...this.getAuthHeaders(),
       },
       body: JSON.stringify(options),
     });
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error?.message || `Failed to generate signed upload token with status ${response.status}`);
-    }
-
-    return data;
+    return await this.parseJsonResponse(response);
   }
 
   /**
    * Directly uploads a file to the storage server.
-   * Supports File/Blob in browser environments and Buffer/ReadStream in Node.js environments.
-   * Supports both Master API Key and Client Signed Upload Tokens (dcd_sig_...).
+   * Supports:
+   *  - String file path (Node.js)
+   *  - Buffer / Uint8Array / ArrayBuffer
+   *  - File / Blob (Browser and universal runtimes)
+   * Auth:
+   *  - Master API Key OR Client Signed Upload Token (dcd_sig_...)
    */
   async upload(file: any, options: UploadOptions = {}): Promise<AssetResult> {
     const uploadUrl = `${this.endpoint}/v1/upload`;
@@ -76,18 +135,24 @@ export class StorageClient {
             fileToAppend = new Blob([new Uint8Array(buf)]);
           }
         } catch {
-          // ignore
+          // If node:fs is not available or throws, proceed with raw string
         }
       }
     } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(file)) {
       fileToAppend = new Blob([new Uint8Array(file)]);
       filename = filename || 'upload.bin';
+    } else if (file instanceof ArrayBuffer) {
+      fileToAppend = new Blob([new Uint8Array(file)]);
+      filename = filename || 'upload.bin';
+    } else if (ArrayBuffer.isView(file)) {
+      fileToAppend = new Blob([new Uint8Array(file.buffer as ArrayBuffer, file.byteOffset, file.byteLength)]);
+      filename = filename || 'upload.bin';
     }
 
     if (filename) {
-      formData.append('file', fileToAppend, filename);
+      formData.append('file', fileToAppend as any, filename);
     } else {
-      formData.append('file', fileToAppend);
+      formData.append('file', fileToAppend as any);
     }
 
     if (options.folder) formData.append('folder', options.folder);
@@ -95,14 +160,14 @@ export class StorageClient {
     if (options.overwrite !== undefined) formData.append('overwrite', String(options.overwrite));
     if (options.uniqueFilename !== undefined) formData.append('unique_filename', String(options.uniqueFilename));
 
-    // Determine auth header: Use options.token if provided, otherwise this.apiKey
+    // Determine auth headers
     const headers: Record<string, string> = {};
     if (options.token) {
       headers['X-Upload-Token'] = options.token;
     } else if (this.apiKey) {
       headers['Authorization'] = `Bearer ${this.apiKey}`;
     } else {
-      throw new Error('StorageClient: Either apiKey or a signed upload token must be provided to upload.');
+      throw new AuthenticationError('Either apiKey or a signed upload token must be provided to upload.');
     }
 
     // Browser upload with progress tracking via XMLHttpRequest
@@ -122,65 +187,138 @@ export class StorageClient {
         };
 
         xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const res = JSON.parse(xhr.responseText);
-              resolve(res.asset);
-            } catch {
-              reject(new Error('Invalid response from storage server'));
+          let errData: any = null;
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300) {
+              return resolve(parsed.asset || parsed);
             }
-          } else {
-            try {
-              const errData = JSON.parse(xhr.responseText);
-              reject(new Error(errData.error?.message || `Upload failed with status ${xhr.status}`));
-            } catch {
-              reject(new Error(`Upload failed with status ${xhr.status}`));
-            }
+            errData = parsed;
+          } catch {
+            // response was not JSON
           }
+
+          const msg = errData?.error?.message || `Upload failed with HTTP status ${xhr.status}`;
+          if (xhr.status === 401 || xhr.status === 403) {
+            return reject(new AuthenticationError(msg, xhr.status, errData));
+          }
+          if (xhr.status === 413) {
+            return reject(new PayloadTooLargeError(msg, xhr.status, errData));
+          }
+          reject(new UploadError(msg, xhr.status, errData));
         };
 
-        xhr.onerror = () => reject(new Error('Network error during file upload'));
+        xhr.onerror = () => reject(new UploadError('Network connection error during upload'));
+        xhr.ontimeout = () => reject(new UploadError('Upload request timed out'));
+        xhr.timeout = options.timeoutMs || this.defaultTimeoutMs;
         xhr.send(formData);
       });
     }
 
-    // Standard fetch upload (Browser or Node.js)
-    const response = await fetch(uploadUrl, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
+    // Standard fetch upload
+    const response = await this.fetchWithTimeout(
+      uploadUrl,
+      {
+        method: 'POST',
+        headers,
+        body: formData,
+      },
+      options.timeoutMs
+    );
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error?.message || `Upload failed with status ${response.status}`);
-    }
-
-    return data.asset;
+    const data = await this.parseJsonResponse(response);
+    return data.asset || data;
   }
 
   /**
-   * Helper method for frontend clients to upload using only a signed upload token (zero API key)
+   * Helper method for frontend browser/mobile clients to upload using only a signed upload token (zero API key)
    */
-  async uploadWithToken(file: any, token: string, options: Omit<UploadOptions, 'token'> = {}): Promise<AssetResult> {
+  async uploadWithToken(
+    file: any,
+    token: string,
+    options: Omit<UploadOptions, 'token'> = {}
+  ): Promise<AssetResult> {
     return this.upload(file, { ...options, token });
   }
 
   /**
-   * Permanently deletes a storage asset (requires API key with delete role)
+   * Permanently deletes a storage asset (requires API key with delete permissions)
    */
   async delete(publicId: string): Promise<boolean> {
     const cleanPublicId = publicId.replace(/^\/+/, '');
     const deleteUrl = `${this.endpoint}/v1/admin/files/${cleanPublicId}`;
 
-    const response = await fetch(deleteUrl, {
+    const response = await this.fetchWithTimeout(deleteUrl, {
       method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-      },
+      headers: this.getAuthHeaders(),
     });
 
+    if (response.status === 404) {
+      throw new NotFoundError(`Asset '${cleanPublicId}' not found`);
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new AuthenticationError('Unauthorized to delete asset', response.status);
+    }
     return response.ok;
+  }
+
+  // --- Private Helpers ---
+
+  private getAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+    return headers;
+  }
+
+  private async fetchWithTimeout(url: string, init: RequestInit, customTimeoutMs?: number): Promise<Response> {
+    const timeout = customTimeoutMs || this.defaultTimeoutMs;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      });
+      return response;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new DCDStorageError(`Request timed out after ${timeout}ms`, 408, 'REQUEST_TIMEOUT');
+      }
+      throw new DCDStorageError(`Network error: ${err.message}`, undefined, 'NETWORK_ERROR');
+    } finally {
+      clearTimeout(id);
+    }
+  }
+
+  private async parseJsonResponse(response: Response): Promise<any> {
+    let data: any = null;
+    try {
+      data = await response.json();
+    } catch {
+      throw new DCDStorageError(
+        `Failed to parse server response with HTTP status ${response.status}`,
+        response.status
+      );
+    }
+
+    if (!response.ok) {
+      const msg = data?.error?.message || `Storage request failed with status ${response.status}`;
+      if (response.status === 401 || response.status === 403) {
+        throw new AuthenticationError(msg, response.status, data);
+      }
+      if (response.status === 404) {
+        throw new NotFoundError(msg, response.status, data);
+      }
+      if (response.status === 413) {
+        throw new PayloadTooLargeError(msg, response.status, data);
+      }
+      throw new DCDStorageError(msg, response.status, data?.error?.code, data);
+    }
+
+    return data;
   }
 }
 

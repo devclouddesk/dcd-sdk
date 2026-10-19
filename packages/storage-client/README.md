@@ -1,11 +1,13 @@
 # @dcd-sdk/storage-client
 
-Official Node.js & TypeScript Client SDK for DevCloudDesk Storage Engine.
-
-High-performance, Cloudinary-style on-the-fly media transformations and ultra-fast direct asset delivery backed by your DevCloudDesk storage clusters.
+Official Node.js & TypeScript Client SDK for **DevCloudDesk Storage Engine**.
 
 [![npm version](https://img.shields.io/npm/v/@dcd-sdk/storage-client?color=blue)](https://www.npmjs.com/package/@dcd-sdk/storage-client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
+
+High-performance, Cloudinary-compatible on-the-fly media transformations and ultra-fast asset delivery backed by your self-hosted DevCloudDesk storage clusters.
 
 ---
 
@@ -22,6 +24,8 @@ pnpm add @dcd-sdk/storage-client
 yarn add @dcd-sdk/storage-client
 ```
 
+Universal compatibility: **CommonJS (`require`)**, **ES Modules (`import`)**, **TypeScript**, **Next.js**, **Vite**, **Bun**, and **Deno**.
+
 ---
 
 ## 🚀 Quickstart
@@ -32,12 +36,21 @@ yarn add @dcd-sdk/storage-client
 import { createBucketClient } from '@dcd-sdk/storage-client';
 
 const bucket = createBucketClient({
-  endpoint: 'http://YOUR_SERVER_IP:7100', // or your custom domain https://storage.yourdomain.com
+  endpoint: 'http://YOUR_SERVER_IP:7100', // or https://storage.yourdomain.com
   apiKey: process.env.STORAGE_API_KEY,    // API Key from DevCloudDesk Dashboard
 });
 ```
 
+*CommonJS is also fully supported:*
+```javascript
+const { createBucketClient } = require('@dcd-sdk/storage-client');
+```
+
+---
+
 ### 2. Uploading Files (Node.js or Browser)
+
+Supports file paths (Node.js), `Buffer`, `Blob`, `File`, or `ArrayBuffer`:
 
 ```typescript
 // Upload from Buffer, File, or local file path
@@ -53,9 +66,11 @@ console.log('Public ID:', asset.publicId);
 console.log('CDN URL:', asset.url);
 ```
 
+---
+
 ### 3. Dynamic On-The-Fly Transformations
 
-Generate real-time optimized WebP/AVIF images with automatic resizing:
+Generate real-time optimized WebP/AVIF images with automatic resizing, blur, and sharpening:
 
 ```typescript
 const avatarUrl = bucket
@@ -63,35 +78,90 @@ const avatarUrl = bucket
   .resize({ width: 400, height: 400, crop: 'cover' })
   .format('webp')
   .quality(80)
+  .blur(4)
   .build();
 
-// Output: http://YOUR_SERVER_IP:7100/v1/image/w_400,h_400,c_cover,f_webp,q_80/avatars/user-profile.png
+// Output: http://YOUR_SERVER_IP:7100/v1/image/w_400,h_400,c_cover,f_webp,q_80,e_blur_4/avatars/user-profile.png
 ```
+
+#### Transformation Options Reference
+
+| Method | Parameters | Description |
+| :--- | :--- | :--- |
+| `.resize({ width, height, crop })` | `number, number, CropMode` | Resizes image dimension with crop strategy |
+| `.crop(mode)` | `'fill' \| 'fit' \| 'crop' \| 'scale'` | Crop strategy |
+| `.format(fmt)` | `'auto' \| 'webp' \| 'avif' \| 'jpeg' \| 'png'` | Output image format |
+| `.quality(q)` | `number (1-100) \| 'auto'` | Compression quality |
+| `.blur(sigma)` | `number (1-100)` | Applies Gaussian blur filter |
+| `.grayscale()` | `boolean` | Converts image to black and white |
+| `.sharpen()` | `boolean` | Enhances edge sharpness |
+| `.rotation(deg)` | `number \| 'auto'` | Rotates image by degrees (e.g. 90, 180, 270) |
+
+---
 
 ### 4. Client-Side Uploads via Signed Tokens (Zero Secret Exposure)
 
 Keep your master API keys safely on your backend server. Generate short-lived, tamper-proof signed upload tokens for your frontend React/Next.js/Mobile apps:
 
 ```typescript
-// Backend endpoint:
+// Backend endpoint (Node.js / Next.js / Express):
 app.post('/api/get-upload-token', async (req, res) => {
   const tokenData = await bucket.createSignedUploadToken({
     folder: 'user-uploads',
-    expiresInSeconds: 300, // 5 minutes
-    maxBytes: 10 * 1024 * 1024, // 10 MB limit
+    expiresInSeconds: 300,        // 5 minutes
+    maxBytes: 10 * 1024 * 1024,   // 10 MB limit
   });
   res.json(tokenData);
 });
 
-// Frontend client:
+// Frontend client (Browser / React / Vue):
 const { token } = await res.json();
-await bucket.uploadWithToken(file, token);
+await bucket.uploadWithToken(file, token, {
+  onProgress: (percent) => setProgress(percent),
+});
 ```
 
-### 5. Deleting Files
+---
+
+### 5. Listing Files & Server Stats
 
 ```typescript
-await bucket.delete(asset.publicId);
+// List files in a bucket / folder
+const result = await bucket.listFiles({
+  folder: 'avatars',
+  page: 1,
+  limit: 20,
+});
+console.log('Files count:', result.data.files.length);
+
+// Server metrics
+const stats = await bucket.getStats();
+console.log('Total files:', stats.filesCount, 'Storage used:', stats.totalStorageBytes);
+```
+
+---
+
+### 6. Robust Error Handling
+
+```typescript
+import {
+  AuthenticationError,
+  NotFoundError,
+  PayloadTooLargeError,
+  UploadError,
+} from '@dcd-sdk/storage-client';
+
+try {
+  await bucket.upload(file);
+} catch (error) {
+  if (error instanceof AuthenticationError) {
+    console.error('Check your API key:', error.message);
+  } else if (error instanceof PayloadTooLargeError) {
+    console.error('File size exceeds server limits:', error.message);
+  } else if (error instanceof UploadError) {
+    console.error('Upload failed:', error.message);
+  }
+}
 ```
 
 ---

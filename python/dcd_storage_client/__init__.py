@@ -18,6 +18,7 @@ from .exceptions import (
     AuthenticationError,
     UploadError,
     NotFoundError,
+    PayloadTooLargeError,
 )
 
 __version__ = "1.0.0"
@@ -32,4 +33,5 @@ __all__ = [
     "AuthenticationError",
     "UploadError",
     "NotFoundError",
+    "PayloadTooLargeError",
 ]
