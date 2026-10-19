@@ -1,8 +1,11 @@
-# @devclouddesk/storage
+# @dcd-sdk/storage-client
 
-Official TypeScript & React Client SDK for DevCloudDesk Object Storage and Media Engine.
+Official Node.js & TypeScript Client SDK for DevCloudDesk Storage Engine.
 
-High-performance, Cloudinary-compatible media transformations and ultra-fast direct asset delivery backed by your DevCloudDesk VPS clusters.
+High-performance, Cloudinary-style on-the-fly media transformations and ultra-fast direct asset delivery backed by your DevCloudDesk storage clusters.
+
+[![npm version](https://img.shields.io/npm/v/@dcd-sdk/storage-client?color=blue)](https://www.npmjs.com/package/@dcd-sdk/storage-client)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
@@ -10,13 +13,13 @@ High-performance, Cloudinary-compatible media transformations and ultra-fast dir
 
 ```bash
 # npm
-npm install @devclouddesk/storage
-
-# yarn
-yarn add @devclouddesk/storage
+npm install @dcd-sdk/storage-client
 
 # pnpm
-pnpm add @devclouddesk/storage
+pnpm add @dcd-sdk/storage-client
+
+# yarn
+yarn add @dcd-sdk/storage-client
 ```
 
 ---
@@ -26,90 +29,73 @@ pnpm add @devclouddesk/storage
 ### 1. Initialize the Client
 
 ```typescript
-import { createStorageClient } from '@devclouddesk/storage';
+import { createBucketClient } from '@dcd-sdk/storage-client';
 
-const storage = createStorageClient({
+const bucket = createBucketClient({
   endpoint: 'http://YOUR_SERVER_IP:7100', // or your custom domain https://storage.yourdomain.com
-  apiKey: 'dcd_key_live_xxxxxxxxxxxx',    // API Key from DevCloudDesk Dashboard
+  apiKey: process.env.STORAGE_API_KEY,    // API Key from DevCloudDesk Dashboard
 });
 ```
 
-### 2. Uploading Files
+### 2. Uploading Files (Node.js or Browser)
 
 ```typescript
-// Browser file input:
-const file = event.target.files[0];
-
-const asset = await storage.upload(file, {
+// Upload from Buffer, File, or local file path
+const asset = await bucket.upload(fileBuffer, {
   folder: 'avatars',
+  filename: 'user-profile.png',
   onProgress: (percent) => {
     console.log(`Upload progress: ${percent}%`);
   },
 });
 
 console.log('Public ID:', asset.publicId);
-console.log('Original CDN URL:', asset.url);
+console.log('CDN URL:', asset.url);
 ```
 
-### 3. Dynamic URL Transformation
+### 3. Dynamic On-The-Fly Transformations
+
+Generate real-time optimized WebP/AVIF images with automatic resizing:
 
 ```typescript
-// Generate on-the-fly optimized and transformed image URLs
-const avatarUrl = storage
+const avatarUrl = bucket
   .url(asset.publicId)
-  .resize(400, 400, 'fill')
+  .resize({ width: 400, height: 400, crop: 'cover' })
   .format('webp')
-  .quality(85)
-  .blur(5)
-  .toString();
+  .quality(80)
+  .build();
 
-console.log(avatarUrl);
-// => http://YOUR_SERVER_IP:7100/v1/image/w_400,h_400,c_fill,f_webp,q_85,e_blur_5/avatars/xxxx.webp
+// Output: http://YOUR_SERVER_IP:7100/v1/image/w_400,h_400,c_cover,f_webp,q_80/avatars/user-profile.png
 ```
 
----
+### 4. Client-Side Uploads via Signed Tokens (Zero Secret Exposure)
 
-## ⚛️ React Integration
-
-Use the built-in `<DcdImage />` or `<Image />` component with automatic format negotiation and lazy loading:
-
-```tsx
-import { DcdImage } from '@devclouddesk/storage/react';
-
-export function UserProfile({ avatarPublicId }) {
-  return (
-    <DcdImage
-      endpoint="http://YOUR_SERVER_IP:7100"
-      publicId={avatarPublicId}
-      width={128}
-      height={128}
-      crop="fill"
-      format="auto"
-      className="rounded-full shadow-md object-cover"
-      alt="User Profile"
-    />
-  );
-}
-```
-
----
-
-## 🛠️ Node.js / Server Admin Usage
-
-Delete assets using your cluster Secret Key (`dcd_sk_...`):
+Keep your master API keys safely on your backend server. Generate short-lived, tamper-proof signed upload tokens for your frontend React/Next.js/Mobile apps:
 
 ```typescript
-const adminStorage = createStorageClient({
-  endpoint: 'http://YOUR_SERVER_IP:7100',
-  apiKey: process.env.DCD_STORAGE_SECRET_KEY, // dcd_sk_...
+// Backend endpoint:
+app.post('/api/get-upload-token', async (req, res) => {
+  const tokenData = await bucket.createSignedUploadToken({
+    folder: 'user-uploads',
+    expiresInSeconds: 300, // 5 minutes
+    maxBytes: 10 * 1024 * 1024, // 10 MB limit
+  });
+  res.json(tokenData);
 });
 
-// Permanently delete asset from storage and metadata
-await adminStorage.delete('avatars/user-123');
+// Frontend client:
+const { token } = await res.json();
+await bucket.uploadWithToken(file, token);
+```
+
+### 5. Deleting Files
+
+```typescript
+await bucket.delete(asset.publicId);
 ```
 
 ---
 
-## 📜 License
+## 📄 License
 
 MIT © [DevCloudDesk](https://devclouddesk.com)
