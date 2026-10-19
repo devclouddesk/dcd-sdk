@@ -1,4 +1,4 @@
-# devclouddesk-storage (Python SDK)
+# dcd-storage-client (Python SDK)
 
 Official Python Client SDK for **DevCloudDesk Storage Engine**.
 
@@ -9,7 +9,7 @@ High-performance, Cloudinary-compatible dynamic image transformations, uploads, 
 ## 📦 Installation
 
 ```bash
-pip install devclouddesk-storage
+pip install dcd-storage-client
 ```
 
 *(Zero required external dependencies — works out-of-the-box with standard Python 3.8+!)*
@@ -21,7 +21,7 @@ pip install devclouddesk-storage
 ### 1. Initialize Client
 
 ```python
-from devclouddesk_storage import StorageClient
+from dcd_storage_client import StorageClient, BucketClient
 
 storage = StorageClient(
     endpoint="http://YOUR_SERVER_IP:7100",  # Or custom domain: https://storage.yourdomain.com
