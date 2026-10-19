@@ -1,0 +1,50 @@
+name: CI & Test Suite
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-js:
+    name: Test TypeScript Packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run test suite
+        run: npm run test
+
+  test-python:
+    name: Test Python Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tool
+        run: pip install build twine
+
+      - name: Build python wheel
+        run: |
+          cd python
+          python -m build
+          twine check dist/*

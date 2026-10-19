@@ -1,0 +1,76 @@
+name: Release & Publish Packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Which registry to publish to'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - npm
+          - pypi
+
+jobs:
+  publish-npm:
+    name: Publish to NPM (@dcd-sdk/storage-client)
+    if: github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'npm'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22 with NPM registry
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies & Build
+        run: |
+          npm ci || npm install
+          npm run build
+
+      - name: Publish @dcd-sdk/storage-client to NPM
+        run: |
+          cd packages/storage-client
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-pypi:
+    name: Publish to PyPI (dcd-storage-client)
+    if: github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'pypi'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Build Python distribution
+        run: |
+          cd python
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
