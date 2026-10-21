@@ -13,6 +13,7 @@ import type {
   FileListResult,
   HealthCheckResult,
   ServerStats,
+  SignedDownloadOptions,
   SignedUploadResult,
   SignUploadOptions,
   StorageClientConfig,
@@ -39,7 +40,10 @@ export class StorageClient {
    * Cloudinary-compatible admin API namespace for listing, usage stats, and resources
    */
   public api = {
+    resource: (publicId: string) => this.getResource(publicId),
     resources: (options: FileListOptions = {}) => this.listFiles(options),
+    update: (publicId: string, options: { access?: 'public' | 'private' }) =>
+      this.updateAccess(publicId, options.access || 'public'),
     delete_resources: (publicIds: string[]) => Promise.all(publicIds.map((id) => this.delete(id))),
     usage: () => this.getStats(),
   };
@@ -63,6 +67,36 @@ export class StorageClient {
   getPublicUrl(publicId: string): string {
     const clean = publicId.replace(/^\/+/, '');
     return `${this.endpoint}/v1/image/${clean}`;
+  }
+
+  /**
+   * Generates a time-limited cryptographically signed URL to access private assets
+   * (e.g. invoices, KYC documents, private backups).
+   */
+  async getSignedUrl(publicId: string, options: SignedDownloadOptions = {}): Promise<string> {
+    if (!this.apiKey) {
+      throw new AuthenticationError('API key is required to generate signed download URLs.');
+    }
+
+    const clean = publicId.replace(/^\/+/, '');
+    const signUrl = `${this.endpoint}/v1/download/sign`;
+
+    const response = await this.fetchWithTimeout(signUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        publicId: clean,
+        expiresInSeconds: options.expiresInSeconds || 300,
+        resourceType: options.resourceType || 'image',
+        transform: options.transform,
+      }),
+    });
+
+    const data = await this.parseJsonResponse(response);
+    return data.signedUrl;
   }
 
   /**
@@ -223,9 +257,14 @@ export class StorageClient {
     }
 
     if (options.folder) formData.append('folder', options.folder);
-    if (options.publicId) formData.append('public_id', options.publicId);
+    if (options.publicId || options.public_id) formData.append('public_id', (options.publicId || options.public_id)!);
     if (options.overwrite !== undefined) formData.append('overwrite', String(options.overwrite));
-    if (options.uniqueFilename !== undefined) formData.append('unique_filename', String(options.uniqueFilename));
+    if (options.uniqueFilename !== undefined || options.unique_filename !== undefined) {
+      formData.append('unique_filename', String(options.uniqueFilename ?? options.unique_filename));
+    }
+    if (options.access) formData.append('access', options.access);
+    const webhook = options.webhookUrl || options.webhook_url;
+    if (webhook) formData.append('webhook_url', webhook);
 
     // Determine auth headers
     const headers: Record<string, string> = {};
@@ -327,6 +366,42 @@ export class StorageClient {
       throw new AuthenticationError('Unauthorized to delete asset', response.status);
     }
     return response.ok;
+  }
+
+  /**
+   * Retrieves full metadata for an asset by publicId (requires API key with read permissions)
+   */
+  async getResource(publicId: string): Promise<AssetResult> {
+    const cleanPublicId = publicId.replace(/^\/+/, '');
+    const url = `${this.endpoint}/v1/admin/files/${cleanPublicId}`;
+
+    const response = await this.fetchWithTimeout(url, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+
+    const data = await this.parseJsonResponse(response);
+    return data.asset || data;
+  }
+
+  /**
+   * Updates asset access level between 'public' and 'private'
+   */
+  async updateAccess(publicId: string, access: 'public' | 'private'): Promise<AssetResult> {
+    const cleanPublicId = publicId.replace(/^\/+/, '');
+    const url = `${this.endpoint}/v1/admin/files/${cleanPublicId}`;
+
+    const response = await this.fetchWithTimeout(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify({ access }),
+    });
+
+    const data = await this.parseJsonResponse(response);
+    return data.asset || data;
   }
 
   // --- Private Helpers ---

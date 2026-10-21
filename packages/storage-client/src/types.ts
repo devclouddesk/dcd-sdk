@@ -51,6 +51,11 @@ export interface UploadOptions {
   overwrite?: boolean;
   uniqueFilename?: boolean;
   unique_filename?: boolean;
+  /** Access level: 'public' (default, served via public CDN) or 'private' (requires signed download URL or API key) */
+  access?: 'public' | 'private';
+  /** Optional webhook callback URL notified upon successful upload */
+  webhookUrl?: string;
+  webhook_url?: string;
   /** Optional client signed upload token (dcd_sig_...) to upload without API key */
   token?: string;
   tags?: string[];
@@ -64,6 +69,8 @@ export interface SignUploadOptions {
   folder?: string;
   maxBytes?: number;
   expiresInSeconds?: number;
+  webhookUrl?: string;
+  access?: 'public' | 'private';
 }
 
 export interface SignedUploadResult {
@@ -73,6 +80,17 @@ export interface SignedUploadResult {
   expiresInSeconds: number;
   folder?: string | null;
   maxBytes?: number | null;
+  access?: 'public' | 'private';
+  webhookUrl?: string | null;
+}
+
+export interface SignedDownloadOptions {
+  /** Lifetime of the signed URL in seconds (default: 300) */
+  expiresInSeconds?: number;
+  /** Type of resource ('image' or 'raw', default: 'image') */
+  resourceType?: 'image' | 'raw';
+  /** Optional on-the-fly transformation string (e.g. 'w_400,h_400,c_fill') */
+  transform?: string;
 }
 
 export interface AssetResult {
@@ -87,6 +105,7 @@ export interface AssetResult {
   bytes: number;
   storageDriver: string;
   etag: string;
+  access?: 'public' | 'private';
   url: string;
   secure_url: string;
   secureUrl: string;

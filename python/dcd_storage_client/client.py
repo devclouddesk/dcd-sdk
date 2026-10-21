@@ -36,8 +36,14 @@ class _ApiNamespace:
     def __init__(self, client: "StorageClient"):
         self._client = client
 
+    def resource(self, public_id: str):
+        return self._client.get_resource(public_id)
+
     def resources(self, *args, **kwargs):
         return self._client.list_files(*args, **kwargs)
+
+    def update(self, public_id: str, access: str = "public"):
+        return self._client.update_access(public_id, access=access)
 
     def usage(self):
         return self._client.get_stats()
@@ -165,11 +171,45 @@ class StorageClient:
         url = f"{self.endpoint}/v1/admin/files?{query_str}"
         return self._request_json(url, method="GET")
 
+    def get_signed_url(
+        self,
+        public_id: str,
+        expires_in_seconds: int = 300,
+        resource_type: str = "image",
+        transform: Optional[str] = None,
+    ) -> str:
+        """
+        Generates a time-limited cryptographically signed URL to access private assets
+        (e.g. invoices, KYC documents, private backups).
+        """
+        if not self.api_key:
+            raise AuthenticationError("StorageClient: api_key is required to generate signed download URLs", 401)
+
+        clean = public_id.lstrip("/")
+        sign_url = f"{self.endpoint}/v1/download/sign"
+        payload: Dict[str, Any] = {
+            "publicId": clean,
+            "expiresInSeconds": int(expires_in_seconds),
+            "resourceType": resource_type,
+        }
+        if transform:
+            payload["transform"] = transform
+
+        data = self._request_json(
+            sign_url,
+            method="POST",
+            body=json.dumps(payload).encode("utf-8"),
+            extra_headers={"Content-Type": "application/json"},
+        )
+        return data.get("signedUrl", "")
+
     def create_signed_upload_token(
         self,
         folder: Optional[str] = None,
         max_bytes: Optional[int] = None,
         expires_in_seconds: int = 300,
+        webhook_url: Optional[str] = None,
+        access: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generates a short-lived cryptographically signed upload token for safe client uploads.
@@ -184,6 +224,10 @@ class StorageClient:
             payload["folder"] = folder
         if max_bytes:
             payload["maxBytes"] = max_bytes
+        if webhook_url:
+            payload["webhookUrl"] = webhook_url
+        if access:
+            payload["access"] = access
 
         return self._request_json(
             sign_url,
@@ -206,12 +250,16 @@ class StorageClient:
         folder: Optional[str] = None,
         max_bytes: Optional[int] = None,
         expires_in_seconds: int = 300,
+        webhook_url: Optional[str] = None,
+        access: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Clean alias for create_signed_upload_token (Industry standard convention)."""
         return self.create_signed_upload_token(
             folder=folder,
             max_bytes=max_bytes,
             expires_in_seconds=expires_in_seconds,
+            webhook_url=webhook_url,
+            access=access,
         )
 
     def upload(
@@ -223,6 +271,8 @@ class StorageClient:
         overwrite: bool = True,
         unique_filename: bool = False,
         token: Optional[str] = None,
+        access: Optional[str] = None,
+        webhook_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Uploads a media file or document to DevCloudDesk storage.
@@ -277,6 +327,18 @@ class StorageClient:
             body.extend(f"--{boundary}\r\n".encode("utf-8"))
             body.extend(b'Content-Disposition: form-data; name="unique_filename"\r\n\r\n')
             body.extend(b"true\r\n")
+
+        # Add 'access' field if requested ('public' | 'private')
+        if access:
+            body.extend(f"--{boundary}\r\n".encode("utf-8"))
+            body.extend(b'Content-Disposition: form-data; name="access"\r\n\r\n')
+            body.extend(f"{access}\r\n".encode("utf-8"))
+
+        # Add 'webhook_url' field if provided
+        if webhook_url:
+            body.extend(f"--{boundary}\r\n".encode("utf-8"))
+            body.extend(b'Content-Disposition: form-data; name="webhook_url"\r\n\r\n')
+            body.extend(f"{webhook_url}\r\n".encode("utf-8"))
 
         # Add 'file' field
         safe_fname = os.path.basename(fname).replace('"', "")
@@ -367,6 +429,25 @@ class StorageClient:
             raise StorageError(f"Delete failed ({e.code})", e.code) from e
         except URLError as e:
             raise StorageError(f"Connection failed: {e}") from e
+
+    def get_resource(self, public_id: str) -> Dict[str, Any]:
+        """Retrieves full metadata for an asset by publicId (requires API key)."""
+        clean_id = public_id.lstrip("/")
+        url = f"{self.endpoint}/v1/admin/files/{clean_id}"
+        data = self._request_json(url, method="GET")
+        return data.get("asset", data)
+
+    def update_access(self, public_id: str, access: str) -> Dict[str, Any]:
+        """Updates asset access level ('public' or 'private')."""
+        clean_id = public_id.lstrip("/")
+        url = f"{self.endpoint}/v1/admin/files/{clean_id}"
+        payload = {"access": access}
+        return self._request_json(
+            url,
+            method="PATCH",
+            body=json.dumps(payload).encode("utf-8"),
+            extra_headers={"Content-Type": "application/json"},
+        )
 
     # --- Internal Helpers ---
 

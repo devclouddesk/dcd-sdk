@@ -112,13 +112,20 @@ describe('StorageClient', () => {
     const client = new StorageClient({ endpoint: 'http://localhost:7100' });
     expect(typeof client.uploader.upload).toBe('function');
     expect(typeof client.uploader.destroy).toBe('function');
+    expect(typeof client.api.resource).toBe('function');
     expect(typeof client.api.resources).toBe('function');
+    expect(typeof client.api.update).toBe('function');
     expect(typeof client.api.usage).toBe('function');
   });
 
   it('throws AuthenticationError when createSignedUploadToken is called without apiKey', async () => {
     const client = new StorageClient({ endpoint: 'http://localhost:7100' });
     await expect(client.createSignedUploadToken()).rejects.toThrow(AuthenticationError);
+  });
+
+  it('throws AuthenticationError when getSignedUrl is called without apiKey', async () => {
+    const client = new StorageClient({ endpoint: 'http://localhost:7100' });
+    await expect(client.getSignedUrl('invoices/inv-001.pdf')).rejects.toThrow(AuthenticationError);
   });
 
   it('exports structured error hierarchy properly', () => {

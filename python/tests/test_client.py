@@ -62,11 +62,18 @@ class TestStorageClient(unittest.TestCase):
         with self.assertRaises(AuthenticationError):
             client.create_signed_upload_token()
 
+    def test_missing_api_key_for_get_signed_url(self):
+        client = StorageClient(endpoint="http://localhost:7100")
+        with self.assertRaises(AuthenticationError):
+            client.get_signed_url("invoices/inv-001.pdf")
+
     def test_namespaces(self):
         client = StorageClient(endpoint="http://localhost:7100")
         self.assertTrue(callable(client.uploader.upload))
         self.assertTrue(callable(client.uploader.destroy))
+        self.assertTrue(callable(client.api.resource))
         self.assertTrue(callable(client.api.resources))
+        self.assertTrue(callable(client.api.update))
         self.assertTrue(callable(client.api.usage))
 
     def test_custom_exceptions(self):
