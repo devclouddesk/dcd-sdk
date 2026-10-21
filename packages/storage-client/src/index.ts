@@ -2,17 +2,20 @@ export { TransformationBuilder } from './builder.js';
 export {
   StorageClient,
   createStorageClient,
+  Storage,
+  createClient,
   BucketClient,
   createBucketClient,
   MediaClient,
   createMediaClient,
 } from './client.js';
 export {
-  DCDStorageError,
+  StorageError,
   AuthenticationError,
   NotFoundError,
   PayloadTooLargeError,
   UploadError,
+  NetworkTimeoutError,
 } from './errors.js';
 export type {
   AssetResult,
@@ -24,6 +27,7 @@ export type {
   BucketClientConfig,
   MediaClientConfig,
   TransformationOptions,
+  UploadableFile,
   UploadOptions,
   SignUploadOptions,
   SignedUploadResult,

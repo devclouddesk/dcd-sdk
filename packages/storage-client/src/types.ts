@@ -1,37 +1,56 @@
-export type CropMode = 'fill' | 'fit' | 'crop' | 'scale';
-export type OutputFormat = 'auto' | 'webp' | 'avif' | 'jpeg' | 'png';
+export type CropMode = 'fill' | 'fit' | 'crop' | 'scale' | 'thumb' | 'pad' | string;
+export type OutputFormat = 'auto' | 'webp' | 'avif' | 'jpeg' | 'png' | string;
 
 export interface StorageClientConfig {
-  /** The base URL of the storage engine cluster (e.g. 'https://storage.mycoolapp.com' or 'http://192.168.1.50:7100') */
-  endpoint: string;
-  /** Public API key (dcd_pk_...), Secret key (dcd_sk_...), or Master key */
+  /** The base URL of the storage engine cluster (e.g. 'https://storage.mycoolapp.com' or 'http://192.168.1.50:7100'). Defaults to process.env.DCD_STORAGE_ENDPOINT */
+  endpoint?: string;
+  /** Public API key (dcd_pk_...), Secret key (dcd_sk_...), or Master key. Defaults to process.env.DCD_STORAGE_API_KEY */
   apiKey?: string;
+  /** Snake_case alias for apiKey */
+  api_key?: string;
   /** Request timeout in milliseconds (default: 30000) */
   timeoutMs?: number;
 }
 
-// Backward compatibility and Bucket aliases
+// Backward compatibility aliases
 export type MediaClientConfig = StorageClientConfig;
 export type BucketClientConfig = StorageClientConfig;
 
 export interface TransformationOptions {
   width?: number;
   height?: number;
+  w?: number;
+  h?: number;
   crop?: CropMode;
+  c?: CropMode;
   format?: OutputFormat;
+  f?: OutputFormat;
   quality?: number | 'auto';
+  q?: number | 'auto';
   blur?: number;
   grayscale?: boolean;
   sharpen?: boolean;
   rotation?: number | 'auto';
 }
 
+/**
+ * Universal file source supported by upload() across Node.js, browsers, edge, and mobile runtimes
+ */
+export type UploadableFile =
+  | string // Local file path in Node.js
+  | Blob // Browser Blob or File
+  | ArrayBuffer
+  | ArrayBufferView // Buffer, Uint8Array, etc.
+  | any;
+
 export interface UploadOptions {
   folder?: string;
   publicId?: string;
+  public_id?: string;
   filename?: string;
   overwrite?: boolean;
   uniqueFilename?: boolean;
+  unique_filename?: boolean;
   /** Optional client signed upload token (dcd_sig_...) to upload without API key */
   token?: string;
   tags?: string[];

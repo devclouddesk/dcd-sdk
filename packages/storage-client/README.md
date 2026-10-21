@@ -33,9 +33,10 @@ Universal compatibility: **CommonJS (`require`)**, **ES Modules (`import`)**, **
 ### 1. Initialize the Client
 
 ```typescript
-import { createBucketClient } from '@dcd-sdk/storage-client';
+import { StorageClient } from '@dcd-sdk/storage-client';
 
-const bucket = createBucketClient({
+// Initializes with explicit config or auto-detects from DCD_STORAGE_ENDPOINT & DCD_STORAGE_API_KEY
+const client = new StorageClient({
   endpoint: 'http://YOUR_SERVER_IP:7100', // or https://storage.yourdomain.com
   apiKey: process.env.STORAGE_API_KEY,    // API Key from DevCloudDesk Dashboard
 });
@@ -43,7 +44,8 @@ const bucket = createBucketClient({
 
 *CommonJS is also fully supported:*
 ```javascript
-const { createBucketClient } = require('@dcd-sdk/storage-client');
+const { StorageClient } = require('@dcd-sdk/storage-client');
+const client = new StorageClient({ endpoint, apiKey });
 ```
 
 ---
@@ -54,9 +56,10 @@ Supports file paths (Node.js), `Buffer`, `Blob`, `File`, or `ArrayBuffer`:
 
 ```typescript
 // Upload from Buffer, File, or local file path
-const asset = await bucket.upload(fileBuffer, {
+const asset = await client.upload(fileBuffer, {
   folder: 'avatars',
   filename: 'user-profile.png',
+  overwrite: true,
   onProgress: (percent) => {
     console.log(`Upload progress: ${percent}%`);
   },
@@ -64,6 +67,11 @@ const asset = await bucket.upload(fileBuffer, {
 
 console.log('Public ID:', asset.publicId);
 console.log('CDN URL:', asset.url);
+console.log('Direct URL:', client.getPublicUrl(asset.publicId));
+
+// Cloudinary-compatible namespace style also supported:
+await client.uploader.upload(fileBuffer, { folder: 'avatars' });
+await client.uploader.destroy(asset.publicId);
 ```
 
 ---
@@ -73,7 +81,7 @@ console.log('CDN URL:', asset.url);
 Generate real-time optimized WebP/AVIF images with automatic resizing, blur, and sharpening:
 
 ```typescript
-const avatarUrl = bucket
+const avatarUrl = client
   .url(asset.publicId)
   .resize({ width: 400, height: 400, crop: 'cover' })
   .format('webp')
@@ -106,7 +114,7 @@ Keep your master API keys safely on your backend server. Generate short-lived, t
 ```typescript
 // Backend endpoint (Node.js / Next.js / Express):
 app.post('/api/get-upload-token', async (req, res) => {
-  const tokenData = await bucket.createSignedUploadToken({
+  const tokenData = await client.createSignedUploadToken({
     folder: 'user-uploads',
     expiresInSeconds: 300,        // 5 minutes
     maxBytes: 10 * 1024 * 1024,   // 10 MB limit
@@ -116,7 +124,7 @@ app.post('/api/get-upload-token', async (req, res) => {
 
 // Frontend client (Browser / React / Vue):
 const { token } = await res.json();
-await bucket.uploadWithToken(file, token, {
+await client.uploadWithToken(file, token, {
   onProgress: (percent) => setProgress(percent),
 });
 ```
@@ -126,8 +134,8 @@ await bucket.uploadWithToken(file, token, {
 ### 5. Listing Files & Server Stats
 
 ```typescript
-// List files in a bucket / folder
-const result = await bucket.listFiles({
+// List files in a folder
+const result = await client.listFiles({
   folder: 'avatars',
   page: 1,
   limit: 20,
@@ -135,7 +143,7 @@ const result = await bucket.listFiles({
 console.log('Files count:', result.data.files.length);
 
 // Server metrics
-const stats = await bucket.getStats();
+const stats = await client.getStats();
 console.log('Total files:', stats.filesCount, 'Storage used:', stats.totalStorageBytes);
 ```
 
@@ -145,14 +153,16 @@ console.log('Total files:', stats.filesCount, 'Storage used:', stats.totalStorag
 
 ```typescript
 import {
+  StorageError,
   AuthenticationError,
   NotFoundError,
   PayloadTooLargeError,
   UploadError,
+  NetworkTimeoutError,
 } from '@dcd-sdk/storage-client';
 
 try {
-  await bucket.upload(file);
+  await client.upload(file);
 } catch (error) {
   if (error instanceof AuthenticationError) {
     console.error('Check your API key:', error.message);

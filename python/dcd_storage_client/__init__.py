@@ -8,30 +8,34 @@ and Cloudinary-style real-time image transformations.
 from .client import (
     StorageClient,
     create_storage_client,
+    Storage,
+    create_client,
     BucketClient,
     create_bucket_client,
-    DCDStorage,
 )
 from .builder import TransformationBuilder
 from .exceptions import (
-    DCDStorageError,
+    StorageError,
     AuthenticationError,
     UploadError,
     NotFoundError,
     PayloadTooLargeError,
+    NetworkTimeoutError,
 )
 
 __version__ = "1.0.0"
 __all__ = [
     "StorageClient",
     "create_storage_client",
+    "Storage",
+    "create_client",
     "BucketClient",
     "create_bucket_client",
-    "DCDStorage",
     "TransformationBuilder",
-    "DCDStorageError",
+    "StorageError",
     "AuthenticationError",
     "UploadError",
     "NotFoundError",
     "PayloadTooLargeError",
+    "NetworkTimeoutError",
 ]

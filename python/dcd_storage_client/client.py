@@ -9,12 +9,38 @@ from urllib.parse import urlencode
 
 from .builder import TransformationBuilder
 from .exceptions import (
-    DCDStorageError,
+    StorageError,
     AuthenticationError,
     NotFoundError,
     PayloadTooLargeError,
     UploadError,
+    NetworkTimeoutError,
 )
+
+
+class _UploaderNamespace:
+    def __init__(self, client: "StorageClient"):
+        self._client = client
+
+    def upload(self, *args, **kwargs):
+        return self._client.upload(*args, **kwargs)
+
+    def destroy(self, public_id: str):
+        return self._client.delete(public_id)
+
+    def delete(self, public_id: str):
+        return self._client.delete(public_id)
+
+
+class _ApiNamespace:
+    def __init__(self, client: "StorageClient"):
+        self._client = client
+
+    def resources(self, *args, **kwargs):
+        return self._client.list_files(*args, **kwargs)
+
+    def usage(self):
+        return self._client.get_stats()
 
 
 class StorageClient:
@@ -48,17 +74,63 @@ class StorageClient:
         client.delete(asset["publicId"])
     """
 
-    def __init__(self, endpoint: str, api_key: Optional[str] = None, timeout: float = 30.0):
-        if not endpoint:
-            raise ValueError("StorageClient: endpoint is required")
+    def __init__(
+        self,
+        endpoint: Optional[str] = None,
+        api_key: Optional[str] = None,
+        timeout: float = 30.0,
+    ):
+        env_endpoint = os.getenv("DCD_STORAGE_ENDPOINT", "")
+        env_api_key = os.getenv("DCD_STORAGE_API_KEY", os.getenv("DCD_API_KEY", ""))
 
-        self.endpoint = endpoint.rstrip("/")
-        self.api_key = (api_key or "").strip()
+        resolved_endpoint = endpoint or env_endpoint
+        if not resolved_endpoint:
+            raise ValueError("StorageClient: endpoint is required (pass endpoint or set DCD_STORAGE_ENDPOINT env variable)")
+
+        self.endpoint = resolved_endpoint.rstrip("/")
+        self.api_key = (api_key or env_api_key or "").strip()
         self.timeout = float(timeout)
 
-    def url(self, public_id: str) -> TransformationBuilder:
-        """Initialize a fluent URL transformation builder for an asset."""
-        return TransformationBuilder(self.endpoint, public_id)
+        # Cloudinary-compatible namespaces
+        self.uploader = _UploaderNamespace(self)
+        self.api = _ApiNamespace(self)
+
+    def get_public_url(self, public_id: str) -> str:
+        """Directly returns the direct public CDN URL for an asset without transformation boilerplate."""
+        clean = public_id.lstrip("/")
+        return f"{self.endpoint}/v1/image/{clean}"
+
+    def url(self, public_id: str, **kwargs) -> Union[TransformationBuilder, str]:
+        """
+        Initialize a fluent URL transformation builder, or return a built URL string if options are passed.
+
+        Example (fluent):
+            client.url("avatars/user-1").width(300).height(300).format("webp").build()
+
+        Example (direct options):
+            client.url("avatars/user-1", width=300, height=300, crop="fill", format="webp")
+        """
+        builder = TransformationBuilder(self.endpoint, public_id)
+        if not kwargs:
+            return builder
+
+        if "width" in kwargs and kwargs["width"] is not None:
+            builder.width(kwargs["width"])
+        if "height" in kwargs and kwargs["height"] is not None:
+            builder.height(kwargs["height"])
+        if "crop" in kwargs and kwargs["crop"]:
+            builder.crop(kwargs["crop"])
+        if "format" in kwargs and kwargs["format"]:
+            builder.format(kwargs["format"])
+        if "quality" in kwargs and kwargs["quality"] is not None:
+            builder.quality(kwargs["quality"])
+        if "blur" in kwargs and kwargs["blur"] is not None:
+            builder.blur(kwargs["blur"])
+        if kwargs.get("grayscale"):
+            builder.grayscale(True)
+        if kwargs.get("sharpen"):
+            builder.sharpen(True)
+        return builder.build()
 
     def health_check(self) -> Dict[str, Any]:
         """Check cluster connectivity and health status."""
@@ -120,6 +192,28 @@ class StorageClient:
             extra_headers={"Content-Type": "application/json"},
         )
 
+    def list(
+        self,
+        folder: Optional[str] = None,
+        page: int = 1,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """Clean alias for list_files (Industry standard convention)."""
+        return self.list_files(folder=folder, page=page, limit=limit)
+
+    def create_upload_token(
+        self,
+        folder: Optional[str] = None,
+        max_bytes: Optional[int] = None,
+        expires_in_seconds: int = 300,
+    ) -> Dict[str, Any]:
+        """Clean alias for create_signed_upload_token (Industry standard convention)."""
+        return self.create_signed_upload_token(
+            folder=folder,
+            max_bytes=max_bytes,
+            expires_in_seconds=expires_in_seconds,
+        )
+
     def upload(
         self,
         file: Union[str, bytes, BinaryIO, io.BytesIO],
@@ -159,7 +253,7 @@ class StorageClient:
         mime_type = mime_type or "application/octet-stream"
 
         # Build multipart/form-data payload
-        boundary = "----DCDStorageBoundary7MA4YWxkTrZu0gW"
+        boundary = "----StorageClientBoundary7MA4YWxkTrZu0gW"
         body = bytearray()
 
         # Add 'folder' field
@@ -250,6 +344,10 @@ class StorageClient:
             token=token,
         )
 
+    def destroy(self, public_id: str) -> bool:
+        """Permanently deletes an asset by its public_id (convenient alias for delete)."""
+        return self.delete(public_id)
+
     def delete(self, public_id: str) -> bool:
         """Permanently deletes an asset by its public_id."""
         clean_id = public_id.lstrip("/")
@@ -266,9 +364,9 @@ class StorageClient:
                 raise NotFoundError(f"Asset '{clean_id}' not found", 404) from e
             if e.code in (401, 403):
                 raise AuthenticationError(f"Delete permission denied ({e.code})", e.code) from e
-            raise DCDStorageError(f"Delete failed ({e.code})", e.code) from e
+            raise StorageError(f"Delete failed ({e.code})", e.code) from e
         except URLError as e:
-            raise DCDStorageError(f"Connection failed: {e}") from e
+            raise StorageError(f"Connection failed: {e}") from e
 
     # --- Internal Helpers ---
 
@@ -310,19 +408,20 @@ class StorageClient:
                 raise NotFoundError(f"Resource not found ({e.code}): {msg}", e.code, err_json) from e
             if e.code == 413:
                 raise PayloadTooLargeError(f"Payload too large ({e.code}): {msg}", e.code, err_json) from e
-            raise DCDStorageError(f"Request failed ({e.code}): {msg}", e.code, err_json) from e
+            raise StorageError(f"Request failed ({e.code}): {msg}", e.code, err_json) from e
         except URLError as e:
-            raise DCDStorageError(f"Connection failed to {url}: {e}") from e
+            raise StorageError(f"Connection failed to {url}: {e}") from e
 
 
-def create_storage_client(endpoint: str, api_key: Optional[str] = None, timeout: float = 30.0) -> StorageClient:
+def create_storage_client(endpoint: Optional[str] = None, api_key: Optional[str] = None, timeout: float = 30.0) -> StorageClient:
     """Factory function to instantiate a StorageClient."""
     return StorageClient(endpoint=endpoint, api_key=api_key, timeout=timeout)
 
 
-# Bucket modern API aliases
+# Canonical Industry Standard Aliases
+create_client = create_storage_client
+Storage = StorageClient
+
+# Backward compatibility aliases
 BucketClient = StorageClient
 create_bucket_client = create_storage_client
-
-# Backward compatibility alias
-DCDStorage = StorageClient

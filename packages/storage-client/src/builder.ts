@@ -5,9 +5,18 @@ export class TransformationBuilder {
   private publicId: string;
   private options: TransformationOptions = {};
 
-  constructor(endpoint: string, publicId: string) {
+  constructor(endpoint: string, publicId: string, initialOptions?: TransformationOptions) {
     this.endpoint = endpoint.replace(/\/+$/, '');
     this.publicId = publicId.replace(/^\/+/, '');
+    if (initialOptions) {
+      const opts: TransformationOptions = { ...initialOptions };
+      if (opts.w && !opts.width) opts.width = opts.w;
+      if (opts.h && !opts.height) opts.height = opts.h;
+      if (opts.c && !opts.crop) opts.crop = opts.c;
+      if (opts.f && !opts.format) opts.format = opts.f;
+      if (opts.q && !opts.quality) opts.quality = opts.q;
+      this.options = opts;
+    }
   }
 
   width(w: number): this {
@@ -94,5 +103,9 @@ export class TransformationBuilder {
 
   toString(): string {
     return this.build();
+  }
+
+  toURL(): URL {
+    return new URL(this.build());
   }
 }

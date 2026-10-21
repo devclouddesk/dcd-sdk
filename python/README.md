@@ -25,9 +25,10 @@ pip install dcd-storage-client
 ### 1. Initialize Client
 
 ```python
-from dcd_storage_client import BucketClient
+from dcd_storage_client import StorageClient
 
-bucket = BucketClient(
+# Explicit configuration or auto-detected from DCD_STORAGE_ENDPOINT & DCD_STORAGE_API_KEY
+client = StorageClient(
     endpoint="http://YOUR_SERVER_IP:7100",  # Or custom domain: https://storage.yourdomain.com
     api_key="dcd_key_live_xxxxxxxxxxxx",    # API key from DevCloudDesk dashboard
 )
@@ -41,17 +42,22 @@ Upload from a local filepath, binary bytes, or file stream:
 
 ```python
 # Upload local file
-asset = bucket.upload("profile.png", folder="avatars")
+asset = client.upload("profile.png", folder="avatars")
 print("Public ID:", asset["publicId"])
 print("CDN URL:", asset["url"])
+print("Direct URL:", client.get_public_url(asset["publicId"]))
 
 # Upload raw bytes or stream (e.g. in FastAPI or Flask)
-asset = bucket.upload(
+asset = client.upload(
     file=image_bytes,
     folder="reports",
     filename="statement.pdf",
     overwrite=True
 )
+
+# Cloudinary-compatible namespace style also supported:
+client.uploader.upload("banner.png", folder="marketing")
+client.uploader.destroy(asset["publicId"])
 ```
 
 ---
@@ -62,7 +68,7 @@ Generate real-time optimized WebP/AVIF images with automatic resizing, blur, and
 
 ```python
 avatar_url = (
-    bucket.url(asset["publicId"])
+    client.url(asset["publicId"])
     .resize(width=400, height=400, crop="fill")
     .format("webp")
     .quality(85)
@@ -95,7 +101,7 @@ Keep your master API keys safely on your backend server. Generate short-lived, t
 
 ```python
 # Generate short-lived upload token in your FastAPI / Django / Flask endpoint
-token_data = bucket.create_signed_upload_token(
+token_data = client.create_signed_upload_token(
     folder="client-uploads",
     expires_in_seconds=300,        # 5 minutes
     max_bytes=10 * 1024 * 1024,   # 10 MB limit
@@ -103,7 +109,7 @@ token_data = bucket.create_signed_upload_token(
 print("Client Upload Token:", token_data["token"])
 
 # Client or script can upload using ONLY the token (zero API key exposure)
-bucket.upload_with_token(file_bytes, token=token_data["token"])
+client.upload_with_token(file_bytes, token=token_data["token"])
 ```
 
 ---
@@ -111,12 +117,12 @@ bucket.upload_with_token(file_bytes, token=token_data["token"])
 ### 5. List Files & Server Stats
 
 ```python
-# List files in a bucket / folder
-files = bucket.list_files(folder="avatars", page=1, limit=20)
+# List files in a folder
+files = client.list_files(folder="avatars", page=1, limit=20)
 print(f"Total files: {files['data']['pagination']['total']}")
 
 # Server metrics
-stats = bucket.get_stats()
+stats = client.get_stats()
 print(f"Total bytes: {stats['totalStorageBytes']}, Driver: {stats['storageDriver']}")
 ```
 
@@ -126,6 +132,7 @@ print(f"Total bytes: {stats['totalStorageBytes']}, Driver: {stats['storageDriver
 
 ```python
 from dcd_storage_client import (
+    StorageError,
     AuthenticationError,
     NotFoundError,
     PayloadTooLargeError,
@@ -133,7 +140,7 @@ from dcd_storage_client import (
 )
 
 try:
-    bucket.upload("large_video.mp4")
+    client.upload("large_video.mp4")
 except AuthenticationError as e:
     print("Authentication failed. Check API key:", e)
 except PayloadTooLargeError as e:

@@ -1,7 +1,8 @@
 import { TransformationBuilder } from './builder.js';
 import {
   AuthenticationError,
-  DCDStorageError,
+  StorageError,
+  NetworkTimeoutError,
   NotFoundError,
   PayloadTooLargeError,
   UploadError,
@@ -15,6 +16,8 @@ import type {
   SignedUploadResult,
   SignUploadOptions,
   StorageClientConfig,
+  TransformationOptions,
+  UploadableFile,
   UploadOptions,
 } from './types.js';
 
@@ -23,20 +26,70 @@ export class StorageClient {
   private apiKey: string;
   private defaultTimeoutMs: number;
 
-  constructor(config: StorageClientConfig) {
-    if (!config || !config.endpoint) {
-      throw new Error('StorageClient: endpoint is required');
+  /**
+   * Cloudinary-compatible uploader namespace for write and delete operations
+   */
+  public uploader = {
+    upload: (file: UploadableFile, options: UploadOptions = {}) => this.upload(file, options),
+    destroy: (publicId: string) => this.delete(publicId),
+    delete: (publicId: string) => this.delete(publicId),
+  };
+
+  /**
+   * Cloudinary-compatible admin API namespace for listing, usage stats, and resources
+   */
+  public api = {
+    resources: (options: FileListOptions = {}) => this.listFiles(options),
+    delete_resources: (publicIds: string[]) => Promise.all(publicIds.map((id) => this.delete(id))),
+    usage: () => this.getStats(),
+  };
+
+  constructor(config: StorageClientConfig = {}) {
+    const envEndpoint = (typeof process !== 'undefined' && process.env?.DCD_STORAGE_ENDPOINT) || '';
+    const envApiKey = (typeof process !== 'undefined' && (process.env?.DCD_STORAGE_API_KEY || process.env?.DCD_API_KEY)) || '';
+
+    const endpoint = config?.endpoint || envEndpoint;
+    if (!endpoint) {
+      throw new Error('StorageClient: endpoint is required (pass in config or set DCD_STORAGE_ENDPOINT env variable)');
     }
-    this.endpoint = config.endpoint.replace(/\/+$/, '');
-    this.apiKey = (config.apiKey || '').trim();
-    this.defaultTimeoutMs = config.timeoutMs || 30000;
+    this.endpoint = endpoint.replace(/\/+$/, '');
+    this.apiKey = (config?.apiKey || config?.api_key || envApiKey || '').trim();
+    this.defaultTimeoutMs = config?.timeoutMs || 30000;
   }
 
   /**
-   * Initializes a fluent URL builder for on-the-fly CDN image transformations
+   * Directly returns the public CDN URL for an asset without transformation boilerplate.
    */
-  url(publicId: string): TransformationBuilder {
-    return new TransformationBuilder(this.endpoint, publicId);
+  getPublicUrl(publicId: string): string {
+    const clean = publicId.replace(/^\/+/, '');
+    return `${this.endpoint}/v1/image/${clean}`;
+  }
+
+  /**
+   * Initializes a URL builder or immediately generates a transformed URL string
+   *
+   * Example (Fluent builder style):
+   *   const url = client.url('avatars/user-1').width(300).height(300).format('webp').build();
+   *
+   * Example (Direct options style):
+   *   const url = client.url('avatars/user-1', { width: 300, height: 300, crop: 'fill', format: 'webp' });
+   */
+  url(publicId: string): TransformationBuilder;
+  url(publicId: string, options: TransformationOptions): string;
+  url(publicId: string, options?: TransformationOptions): TransformationBuilder | string;
+  url(publicId: string, options?: TransformationOptions): TransformationBuilder | string {
+    const builder = new TransformationBuilder(this.endpoint, publicId, options);
+    if (options && Object.keys(options).length > 0) {
+      return builder.build();
+    }
+    return builder;
+  }
+
+  /**
+   * Permanently deletes a storage asset (convenient alias for delete)
+   */
+  async destroy(publicId: string): Promise<boolean> {
+    return this.delete(publicId);
   }
 
   /**
@@ -87,6 +140,13 @@ export class StorageClient {
   }
 
   /**
+   * Clean alias for listFiles (Industry standard convention)
+   */
+  async list(options: FileListOptions = {}): Promise<FileListResult> {
+    return this.listFiles(options);
+  }
+
+  /**
    * Generates a short-lived cryptographically signed upload token for safe client-side browser/mobile uploads.
    * Keeps master API keys strictly on backend servers.
    */
@@ -106,6 +166,13 @@ export class StorageClient {
     });
 
     return await this.parseJsonResponse(response);
+  }
+
+  /**
+   * Clean alias for createSignedUploadToken (Industry standard convention)
+   */
+  async createUploadToken(options: SignUploadOptions = {}): Promise<SignedUploadResult> {
+    return this.createSignedUploadToken(options);
   }
 
   /**
@@ -285,9 +352,9 @@ export class StorageClient {
       return response;
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        throw new DCDStorageError(`Request timed out after ${timeout}ms`, 408, 'REQUEST_TIMEOUT');
+        throw new NetworkTimeoutError(`Request timed out after ${timeout}ms`);
       }
-      throw new DCDStorageError(`Network error: ${err.message}`, undefined, 'NETWORK_ERROR');
+      throw new StorageError(`Network error: ${err.message}`, undefined, 'NETWORK_ERROR');
     } finally {
       clearTimeout(id);
     }
@@ -298,7 +365,7 @@ export class StorageClient {
     try {
       data = await response.json();
     } catch {
-      throw new DCDStorageError(
+      throw new StorageError(
         `Failed to parse server response with HTTP status ${response.status}`,
         response.status
       );
@@ -315,23 +382,26 @@ export class StorageClient {
       if (response.status === 413) {
         throw new PayloadTooLargeError(msg, response.status, data);
       }
-      throw new DCDStorageError(msg, response.status, data?.error?.code, data);
+      throw new StorageError(msg, response.status, data?.error?.code, data);
     }
 
     return data;
   }
 }
 
-export function createStorageClient(config: StorageClientConfig): StorageClient {
+export function createStorageClient(config: StorageClientConfig = {}): StorageClient {
   return new StorageClient(config);
 }
 
-// Bucket modern API aliases
+// Canonical Industry Standard Aliases
+export const Storage = StorageClient;
+export type Storage = StorageClient;
+export const createClient = createStorageClient;
+
+// Backward compatibility aliases
 export const BucketClient = StorageClient;
 export type BucketClient = StorageClient;
 export const createBucketClient = createStorageClient;
-
-// Backward compatibility aliases
 export const MediaClient = StorageClient;
 export type MediaClient = StorageClient;
 export const createMediaClient = createStorageClient;

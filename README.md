@@ -30,26 +30,35 @@ npm install @dcd-sdk/storage-client
 ```
 
 ```typescript
-import { createBucketClient } from '@dcd-sdk/storage-client';
+import { StorageClient } from '@dcd-sdk/storage-client';
 
-const bucket = createBucketClient({
+// Initializes with explicit config or auto-detects from DCD_STORAGE_ENDPOINT & DCD_STORAGE_API_KEY
+const client = new StorageClient({
   endpoint: 'http://your-server-ip:7100',
   apiKey: process.env.DCD_STORAGE_API_KEY,
 });
 
 // Upload asset (Buffer, File, Blob, or file path)
-const result = await bucket.upload(fileBuffer, {
+const result = await client.upload('./avatar.png', {
   folder: 'avatars',
   filename: 'user.png',
+  overwrite: true,
 });
 
-// Generate dynamic transformation CDN URL
-const avatarUrl = bucket
+// Direct fast public URL
+const directUrl = client.getPublicUrl(result.publicId);
+
+// Dynamic on-the-fly transformation CDN URL
+const avatarUrl = client
   .url(result.publicId)
   .resize({ width: 400, height: 400, crop: 'cover' })
   .format('webp')
   .quality(80)
   .build();
+
+// Cloudinary-compatible namespaces also supported:
+await client.uploader.upload(file, { folder: 'banners' });
+await client.uploader.destroy(result.publicId);
 ```
 
 ---
@@ -61,19 +70,22 @@ pip install dcd-storage-client
 ```
 
 ```python
-from dcd_storage_client import BucketClient
+from dcd_storage_client import StorageClient
 import os
 
-bucket = BucketClient(
+client = StorageClient(
     endpoint="http://your-server-ip:7100",
     api_key=os.environ.get("DCD_STORAGE_API_KEY"),
 )
 
 # Upload asset (bytes, file-like object, or filepath)
-asset = bucket.upload("./banner.png", folder="marketing")
+asset = client.upload("./banner.png", folder="marketing")
 
 # Dynamic transformation URL
-avatar_url = bucket.url(asset["publicId"]).resize(400, 400, "fill").format("webp").to_string()
+avatar_url = client.url(asset["publicId"]).resize(400, 400, "fill").format("webp").to_string()
+
+# Delete
+client.delete(asset["publicId"])
 ```
 
 ---
