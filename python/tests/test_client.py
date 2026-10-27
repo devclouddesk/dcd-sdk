@@ -75,6 +75,10 @@ class TestStorageClient(unittest.TestCase):
         self.assertTrue(callable(client.api.resources))
         self.assertTrue(callable(client.api.update))
         self.assertTrue(callable(client.api.usage))
+        self.assertTrue(callable(client.get_file))
+        self.assertTrue(callable(client.update_access))
+        self.assertTrue(callable(client.purge_cache))
+        self.assertTrue(callable(client.upload_with_token))
 
     def test_custom_exceptions(self):
         auth_err = AuthenticationError("Unauthorized", 401)

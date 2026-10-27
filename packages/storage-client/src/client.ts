@@ -387,6 +387,26 @@ export class StorageClient {
   }
 
   /**
+   * Clean alias for getResource
+   */
+  async getFile(publicId: string): Promise<AssetResult> {
+    return this.getResource(publicId);
+  }
+
+  /**
+   * Purges all cached image transformation variants from server disk
+   */
+  async purgeCache(): Promise<{ success: boolean; purgedCount: number }> {
+    const url = `${this.endpoint}/v1/admin/purge-cache`;
+    const response = await this.fetchWithTimeout(url, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+
+    return await this.parseJsonResponse(response);
+  }
+
+  /**
    * Updates asset access level between 'public' and 'private'
    */
   async updateAccess(publicId: string, access: 'public' | 'private'): Promise<AssetResult> {

@@ -116,6 +116,10 @@ describe('StorageClient', () => {
     expect(typeof client.api.resources).toBe('function');
     expect(typeof client.api.update).toBe('function');
     expect(typeof client.api.usage).toBe('function');
+    expect(typeof client.getFile).toBe('function');
+    expect(typeof client.updateAccess).toBe('function');
+    expect(typeof client.purgeCache).toBe('function');
+    expect(typeof client.uploadWithToken).toBe('function');
   });
 
   it('throws AuthenticationError when createSignedUploadToken is called without apiKey', async () => {

@@ -439,6 +439,15 @@ class StorageClient:
         data = self._request_json(url, method="GET")
         return data.get("asset", data)
 
+    def get_file(self, public_id: str) -> Dict[str, Any]:
+        """Alias for get_resource."""
+        return self.get_resource(public_id)
+
+    def purge_cache(self) -> Dict[str, Any]:
+        """Purges all cached image transformation variants from server disk."""
+        url = f"{self.endpoint}/v1/admin/purge-cache"
+        return self._request_json(url, method="POST")
+
     def update_access(self, public_id: str, access: str) -> Dict[str, Any]:
         """Updates asset access level ('public' or 'private')."""
         clean_id = public_id.lstrip("/")
@@ -455,7 +464,7 @@ class StorageClient:
 
     def _get_headers(self) -> Dict[str, str]:
         headers = {
-            "User-Agent": "dcd-storage-client-python/1.0.0",
+            "User-Agent": "dcd-storage-client-python/1.0.2",
         }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"

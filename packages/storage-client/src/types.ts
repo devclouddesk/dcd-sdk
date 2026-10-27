@@ -97,16 +97,20 @@ export interface SignedDownloadOptions {
 
 export interface AssetResult {
   asset_id?: string;
+  id?: string;
   public_id: string;
-  publicId?: string;
+  publicId: string;
   folder?: string;
   version?: number;
   version_id?: string;
   signature?: string;
   filename?: string;
   original_filename?: string;
+  originalFilename?: string;
   display_name?: string;
+  displayName?: string;
   format: string;
+  mimeType?: string;
   resource_type?: string;
   resourceType?: string;
   width?: number;
@@ -115,13 +119,15 @@ export interface AssetResult {
   type?: string;
   storageDriver?: string;
   etag?: string;
+  tags?: string[];
   access?: 'public' | 'private';
   url: string;
   secure_url: string;
-  secureUrl?: string;
+  secureUrl: string;
   rawUrl?: string;
   created_at?: string | number;
   createdAt?: string | number;
+  updatedAt?: string | number;
 }
 
 // Backward compatibility and Bucket aliases
@@ -162,8 +168,8 @@ export interface ServerStats {
 }
 
 export interface HealthCheckResult {
-  status: 'ok' | 'error';
+  status: 'ok' | 'healthy' | 'error' | string;
   uptime?: number;
-  timestamp?: number;
+  timestamp?: number | string;
   version?: string;
 }
