@@ -14,142 +14,118 @@ High-performance, Cloudinary-compatible on-the-fly media transformations and ult
 ## 📦 Installation
 
 ```bash
-# npm
 npm install @dcd-sdk/storage-client
-
-# pnpm
-pnpm add @dcd-sdk/storage-client
-
-# yarn
-yarn add @dcd-sdk/storage-client
+# or: pnpm add @dcd-sdk/storage-client / yarn add @dcd-sdk/storage-client
 ```
 
 Universal compatibility: **CommonJS (`require`)**, **ES Modules (`import`)**, **TypeScript**, **Next.js**, **Vite**, **Bun**, and **Deno**.
 
 ---
 
-## 🚀 Quickstart
+## ⚡ Basic Use Case (In 30 Seconds)
 
-### 1. Initialize the Client
+Upload an image and generate an on-the-fly optimized WebP thumbnail:
 
 ```typescript
 import { StorageClient } from '@dcd-sdk/storage-client';
 
-// Initializes with explicit config or auto-detects from DCD_STORAGE_ENDPOINT & DCD_STORAGE_API_KEY
+// 1. Initialize client
 const client = new StorageClient({
-  endpoint: 'http://YOUR_SERVER_IP:7100', // or https://storage.yourdomain.com
-  apiKey: process.env.STORAGE_API_KEY,    // API Key from DevCloudDesk Dashboard
-});
-```
-
-*CommonJS is also fully supported:*
-```javascript
-const { StorageClient } = require('@dcd-sdk/storage-client');
-const client = new StorageClient({ endpoint, apiKey });
-```
-
----
-
-### 2. Uploading Files (Node.js or Browser)
-
-Supports file paths (Node.js), `Buffer`, `Blob`, `File`, or `ArrayBuffer`:
-
-```typescript
-// Upload from Buffer, File, or local file path
-const asset = await client.upload(fileBuffer, {
-  folder: 'avatars',
-  filename: 'user-profile.png',
-  overwrite: true,
-  onProgress: (percent) => {
-    console.log(`Upload progress: ${percent}%`);
-  },
+  endpoint: 'http://YOUR_SERVER_IP:7100', // or https://cdn.yourdomain.com
+  apiKey: process.env.STORAGE_API_KEY,    // API key from DevCloudDesk dashboard
 });
 
-console.log('Public ID:', asset.publicId);
-console.log('CDN URL:', asset.url);
-console.log('Direct URL:', client.getPublicUrl(asset.publicId));
+// 2. Upload an image (supports Buffer, File, Blob, or file path)
+const asset = await client.upload('./avatar.png', { folder: 'users' });
+console.log('Original URL:', asset.url);
 
-// Cloudinary-compatible namespace style also supported:
-await client.uploader.upload(fileBuffer, { folder: 'avatars' });
-await client.uploader.destroy(asset.publicId);
-```
-
----
-
-### 3. Dynamic On-The-Fly Transformations
-
-Generate real-time optimized WebP/AVIF images with automatic resizing, blur, and sharpening:
-
-```typescript
-const avatarUrl = client
+// 3. Generate instant on-the-fly WebP thumbnail
+const thumbnailUrl = client
   .url(asset.publicId)
-  .resize({ width: 400, height: 400, crop: 'cover' })
+  .resize({ width: 300, height: 300, crop: 'fill' })
   .format('webp')
   .quality(80)
-  .blur(4)
   .build();
 
-// Output: http://YOUR_SERVER_IP:7100/v1/image/w_400,h_400,c_cover,f_webp,q_80,e_blur_4/avatars/user-profile.png
+console.log('Thumbnail URL:', thumbnailUrl);
+// => http://YOUR_SERVER_IP:7100/image/upload/w_300,h_300,c_fill,f_webp,q_80/users/avatar.webp
 ```
 
-#### Transformation Options Reference
+---
 
-| Method | Parameters | Description |
+## 📖 Complete API Reference (All Functions)
+
+The `StorageClient` instance provides the following core methods:
+
+### 1. Upload & Delivery
+
+| Function | Signature | Description |
 | :--- | :--- | :--- |
-| `.resize({ width, height, crop })` | `number, number, CropMode` | Resizes image dimension with crop strategy |
-| `.crop(mode)` | `'fill' \| 'fit' \| 'crop' \| 'scale'` | Crop strategy |
-| `.format(fmt)` | `'auto' \| 'webp' \| 'avif' \| 'jpeg' \| 'png'` | Output image format |
-| `.quality(q)` | `number (1-100) \| 'auto'` | Compression quality |
-| `.blur(sigma)` | `number (1-100)` | Applies Gaussian blur filter |
-| `.grayscale()` | `boolean` | Converts image to black and white |
-| `.sharpen()` | `boolean` | Enhances edge sharpness |
-| `.rotation(deg)` | `number \| 'auto'` | Rotates image by degrees (e.g. 90, 180, 270) |
+| `upload(file, options?)` | `(file: UploadableFile, options?: UploadOptions) => Promise<AssetResult>` | Uploads file (Buffer, Blob, File, or path) to storage with auto format detection. |
+| `url(publicId, options?)` | `(publicId: string, options?: TransformationOptions) => TransformationBuilder` | Creates a chainable builder for on-the-fly image transformations. |
+| `getPublicUrl(publicId)` | `(publicId: string) => string` | Directly returns public CDN URL for an asset without transformation parameters. |
+| `getSignedUrl(publicId, options?)` | `(publicId: string, options?: SignedDownloadOptions) => Promise<string>` | Generates a cryptographically signed URL to access private assets securely. |
 
----
+### 2. Client-Side Uploads (Zero Secret Exposure)
 
-### 4. Client-Side Uploads via Signed Tokens (Zero Secret Exposure)
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `createSignedUploadToken(options?)` | `(options?: SignUploadOptions) => Promise<SignedUploadResult>` | Generates a short-lived token for safe browser/mobile client uploads. |
+| `uploadWithToken(file, token, options?)` | `(file: UploadableFile, token: string, options?: UploadOptions) => Promise<AssetResult>` | Uploads a file directly using only a signed upload token (no secret API key required). |
 
-Keep your master API keys safely on your backend server. Generate short-lived, tamper-proof signed upload tokens for your frontend React/Next.js/Mobile apps:
+### 3. File & Folder Management
+
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `listFiles(options?)` | `(options?: FileListOptions) => Promise<FileListResult>` | Lists stored files with pagination (`page`, `limit`) and folder filtering. |
+| `getFile(publicId)` | `(publicId: string) => Promise<AssetResult>` | Retrieves full metadata and details for a single asset by its `publicId`. |
+| `updateAccess(publicId, access)` | `(publicId: string, access: 'public' \| 'private') => Promise<AssetResult>` | Toggles an asset's access mode between `'public'` and `'private'`. |
+| `delete(publicId)` | `(publicId: string) => Promise<boolean>` | Permanently deletes an asset and automatically purges its transformed variants. |
+
+### 4. Server Maintenance & Stats
+
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `getStats()` | `() => Promise<ServerStats>` | Retrieves real-time storage metrics (files count, storage bytes, cache size, uptime). |
+| `purgeCache()` | `() => Promise<number>` | Purges all cached image transformation variants from the server disk. |
+| `healthCheck()` | `() => Promise<HealthCheckResult>` | Checks whether the storage cluster is online and healthy. |
+
+### 5. Cloudinary Compatibility Namespaces
+
+Drop-in migration for existing Cloudinary codebases:
 
 ```typescript
-// Backend endpoint (Node.js / Next.js / Express):
-app.post('/api/get-upload-token', async (req, res) => {
-  const tokenData = await client.createSignedUploadToken({
-    folder: 'user-uploads',
-    expiresInSeconds: 300,        // 5 minutes
-    maxBytes: 10 * 1024 * 1024,   // 10 MB limit
-  });
-  res.json(tokenData);
-});
+// Uploader namespace
+await client.uploader.upload(file, { folder: 'photos' });
+await client.uploader.destroy('photos/sample');
 
-// Frontend client (Browser / React / Vue):
-const { token } = await res.json();
-await client.uploadWithToken(file, token, {
-  onProgress: (percent) => setProgress(percent),
-});
+// Admin API namespace
+const file = await client.api.resource('photos/sample');
+const list = await client.api.resources({ folder: 'photos', max_results: 50 });
+const stats = await client.api.usage();
 ```
 
 ---
 
-### 5. Listing Files & Server Stats
+## 🎨 Image Transformation Methods
 
-```typescript
-// List files in a folder
-const result = await client.listFiles({
-  folder: 'avatars',
-  page: 1,
-  limit: 20,
-});
-console.log('Files count:', result.data.files.length);
+When using `client.url(publicId)`, chain any of these transformation methods:
 
-// Server metrics
-const stats = await client.getStats();
-console.log('Total files:', stats.filesCount, 'Storage used:', stats.totalStorageBytes);
-```
+| Method | Example | Description |
+| :--- | :--- | :--- |
+| `.resize({ width, height, crop })` | `.resize({ width: 400, height: 400, crop: 'fill' })` | Resizes dimension with crop mode (`fill`, `fit`, `crop`, `scale`). |
+| `.crop(mode)` | `.crop('fill')` | Sets crop strategy (`fill`, `fit`, `crop`, `scale`). |
+| `.format(fmt)` | `.format('webp')` | Output format: `'auto'`, `'webp'`, `'avif'`, `'jpeg'`, `'png'`. |
+| `.quality(q)` | `.quality(80)` | Compression quality (`1` to `100` or `'auto'`). |
+| `.blur(sigma)` | `.blur(4)` | Applies Gaussian blur filter (`1` to `100`). |
+| `.grayscale()` | `.grayscale()` | Converts image to black and white. |
+| `.sharpen()` | `.sharpen()` | Enhances edge sharpness. |
+| `.rotation(deg)` | `.rotation(90)` | Rotates image by degrees (`90`, `180`, `270`, `'auto'`). |
+| `.build()` / `.toString()` | `.build()` | Returns the final transformed CDN URL string. |
 
 ---
 
-### 6. Robust Error Handling
+## 🛡️ Error Handling
 
 ```typescript
 import {
@@ -158,18 +134,17 @@ import {
   NotFoundError,
   PayloadTooLargeError,
   UploadError,
-  NetworkTimeoutError,
 } from '@dcd-sdk/storage-client';
 
 try {
-  await client.upload(file);
+  await client.upload('./document.pdf');
 } catch (error) {
   if (error instanceof AuthenticationError) {
-    console.error('Check your API key:', error.message);
+    console.error('Invalid API Key:', error.message);
   } else if (error instanceof PayloadTooLargeError) {
-    console.error('File size exceeds server limits:', error.message);
-  } else if (error instanceof UploadError) {
-    console.error('Upload failed:', error.message);
+    console.error('File exceeds size limit:', error.message);
+  } else if (error instanceof StorageError) {
+    console.error('Storage error:', error.message);
   }
 }
 ```

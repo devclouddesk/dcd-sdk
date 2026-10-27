@@ -10,6 +10,8 @@ export interface StorageClientConfig {
   api_key?: string;
   /** Request timeout in milliseconds (default: 30000) */
   timeoutMs?: number;
+  /** Delivery URL pattern prefix ('image/upload' | 'cdn' | 'storage' | string). Defaults to 'image/upload' */
+  deliveryPrefix?: 'image/upload' | 'cdn' | 'storage' | string;
 }
 
 // Backward compatibility aliases
@@ -94,24 +96,32 @@ export interface SignedDownloadOptions {
 }
 
 export interface AssetResult {
+  asset_id?: string;
   public_id: string;
-  publicId: string;
-  filename: string;
+  publicId?: string;
+  folder?: string;
+  version?: number;
+  version_id?: string;
+  signature?: string;
+  filename?: string;
+  original_filename?: string;
+  display_name?: string;
   format: string;
   resource_type?: string;
   resourceType?: string;
   width?: number;
   height?: number;
   bytes: number;
-  storageDriver: string;
-  etag: string;
+  type?: string;
+  storageDriver?: string;
+  etag?: string;
   access?: 'public' | 'private';
   url: string;
   secure_url: string;
-  secureUrl: string;
+  secureUrl?: string;
   rawUrl?: string;
-  created_at: number;
-  createdAt: number;
+  created_at?: string | number;
+  createdAt?: string | number;
 }
 
 // Backward compatibility and Bucket aliases

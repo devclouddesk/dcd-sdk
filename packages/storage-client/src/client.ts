@@ -26,6 +26,7 @@ export class StorageClient {
   private endpoint: string;
   private apiKey: string;
   private defaultTimeoutMs: number;
+  private deliveryPrefix: string;
 
   /**
    * Cloudinary-compatible uploader namespace for write and delete operations
@@ -59,6 +60,7 @@ export class StorageClient {
     this.endpoint = endpoint.replace(/\/+$/, '');
     this.apiKey = (config?.apiKey || config?.api_key || envApiKey || '').trim();
     this.defaultTimeoutMs = config?.timeoutMs || 30000;
+    this.deliveryPrefix = (config?.deliveryPrefix || 'image/upload').replace(/^\/+|\/+$/g, '');
   }
 
   /**
@@ -66,7 +68,7 @@ export class StorageClient {
    */
   getPublicUrl(publicId: string): string {
     const clean = publicId.replace(/^\/+/, '');
-    return `${this.endpoint}/v1/image/${clean}`;
+    return `${this.endpoint}/${this.deliveryPrefix}/${clean}`;
   }
 
   /**
@@ -112,7 +114,7 @@ export class StorageClient {
   url(publicId: string, options: TransformationOptions): string;
   url(publicId: string, options?: TransformationOptions): TransformationBuilder | string;
   url(publicId: string, options?: TransformationOptions): TransformationBuilder | string {
-    const builder = new TransformationBuilder(this.endpoint, publicId, options);
+    const builder = new TransformationBuilder(this.endpoint, publicId, options, this.deliveryPrefix);
     if (options && Object.keys(options).length > 0) {
       return builder.build();
     }

@@ -1,7 +1,10 @@
+import re
 from typing import Optional, Union, Literal
 
 CropMode = Literal["fill", "fit", "crop", "scale", "thumb"]
 OutputFormat = Literal["auto", "webp", "avif", "png", "jpeg", "jpg", "gif"]
+
+KNOWN_IMAGE_EXTS = re.compile(r"\.(jpg|jpeg|png|webp|avif|gif|tiff|svg|bmp)$", re.IGNORECASE)
 
 
 class TransformationBuilder:
@@ -19,9 +22,10 @@ class TransformationBuilder:
         )
     """
 
-    def __init__(self, endpoint: str, public_id: str):
+    def __init__(self, endpoint: str, public_id: str, delivery_prefix: str = "image/upload"):
         self._endpoint = endpoint.rstrip("/")
         self._public_id = public_id.lstrip("/")
+        self._delivery_prefix = delivery_prefix.strip("/") or "image/upload"
         self._width: Optional[int] = None
         self._height: Optional[int] = None
         self._crop: Optional[str] = None
@@ -31,6 +35,16 @@ class TransformationBuilder:
         self._grayscale: bool = False
         self._sharpen: bool = False
         self._rotation: Optional[Union[int, str]] = None
+
+    def prefix(self, path_prefix: str) -> "TransformationBuilder":
+        """Configure delivery URL path prefix (e.g. 'image/upload', 'cdn', etc.)."""
+        self._delivery_prefix = path_prefix.strip("/") or "image/upload"
+        return self
+
+    def cloudinary_mode(self) -> "TransformationBuilder":
+        """Switch to 1:1 Cloudinary delivery path format (/image/upload/...)."""
+        self._delivery_prefix = "image/upload"
+        return self
 
     def width(self, w: int) -> "TransformationBuilder":
         """Set output width in pixels."""
@@ -117,11 +131,21 @@ class TransformationBuilder:
         return ",".join(parts) if parts else "original"
 
     def build(self) -> str:
-        """Returns the full public transformed URL."""
+        """Returns the full public transformed URL with proper extension."""
         params = self.to_params_string()
+        final_public_id = self._public_id
+
+        # Cloudinary standard: If a specific format was selected, ensure URL ends with that extension
+        if self._format and self._format != "auto":
+            target_ext = "jpg" if self._format == "jpeg" else self._format
+            if KNOWN_IMAGE_EXTS.search(final_public_id):
+                final_public_id = KNOWN_IMAGE_EXTS.sub(f".{target_ext}", final_public_id)
+            else:
+                final_public_id = f"{final_public_id}.{target_ext}"
+
         if params == "original":
-            return f"{self._endpoint}/v1/image/{self._public_id}"
-        return f"{self._endpoint}/v1/image/{params}/{self._public_id}"
+            return f"{self._endpoint}/{self._delivery_prefix}/{final_public_id}"
+        return f"{self._endpoint}/{self._delivery_prefix}/{params}/{final_public_id}"
 
     def to_string(self) -> str:
         """Alias for build()."""

@@ -27,22 +27,22 @@ describe('TransformationBuilder', () => {
       .build();
 
     expect(url).toBe(
-      'http://localhost:7100/v1/image/w_400,h_400,c_fill,f_webp,q_80,e_blur_4,e_gray,e_sharp/avatars/user.jpg'
+      'http://localhost:7100/image/upload/w_400,h_400,c_fill,f_webp,q_80,e_blur_4,e_gray,e_sharp/avatars/user.webp'
     );
   });
 
   it('returns original endpoint URL when no transformations are applied', () => {
     const builder = new TransformationBuilder('http://localhost:7100', 'docs/invoice.pdf');
     expect(builder.toParamsString()).toBe('original');
-    expect(builder.build()).toBe('http://localhost:7100/v1/image/docs/invoice.pdf');
-    expect(builder.toString()).toBe('http://localhost:7100/v1/image/docs/invoice.pdf');
-    expect(builder.toURL().pathname).toBe('/v1/image/docs/invoice.pdf');
+    expect(builder.build()).toBe('http://localhost:7100/image/upload/docs/invoice.pdf');
+    expect(builder.toString()).toBe('http://localhost:7100/image/upload/docs/invoice.pdf');
+    expect(builder.toURL().pathname).toBe('/image/upload/docs/invoice.pdf');
   });
 
   it('handles leading and trailing slashes in endpoint and publicId', () => {
     const builder = new TransformationBuilder('http://localhost:7100///', '///photos/pic.jpg');
     const url = builder.format('avif').build();
-    expect(url).toBe('http://localhost:7100/v1/image/f_avif/photos/pic.jpg');
+    expect(url).toBe('http://localhost:7100/image/upload/f_avif/photos/pic.avif');
   });
 
   it('supports initialOptions directly in constructor', () => {
@@ -51,7 +51,7 @@ describe('TransformationBuilder', () => {
       height: 200,
       format: 'webp',
     });
-    expect(builder.build()).toBe('http://localhost:7100/v1/image/w_200,h_200,f_webp/photos/pic.jpg');
+    expect(builder.build()).toBe('http://localhost:7100/image/upload/w_200,h_200,f_webp/photos/pic.webp');
   });
 });
 
@@ -89,7 +89,7 @@ describe('StorageClient', () => {
 
     const client = new StorageClient();
     expect(client).toBeInstanceOf(StorageClient);
-    expect(client.getPublicUrl('avatars/me.jpg')).toBe('http://localhost:7100/v1/image/avatars/me.jpg');
+    expect(client.getPublicUrl('avatars/me.jpg')).toBe('http://localhost:7100/image/upload/avatars/me.jpg');
   });
 
   it('throws error when endpoint is missing in config and env', () => {
@@ -98,14 +98,14 @@ describe('StorageClient', () => {
 
   it('provides getPublicUrl for instant direct URLs', () => {
     const client = new StorageClient({ endpoint: 'http://localhost:7100' });
-    expect(client.getPublicUrl('avatars/me.jpg')).toBe('http://localhost:7100/v1/image/avatars/me.jpg');
-    expect(client.getPublicUrl('/docs/invoice.pdf')).toBe('http://localhost:7100/v1/image/docs/invoice.pdf');
+    expect(client.getPublicUrl('avatars/me.jpg')).toBe('http://localhost:7100/image/upload/avatars/me.jpg');
+    expect(client.getPublicUrl('/docs/invoice.pdf')).toBe('http://localhost:7100/image/upload/docs/invoice.pdf');
   });
 
   it('supports direct options in url() method', () => {
     const client = new StorageClient({ endpoint: 'http://localhost:7100' });
     const url = client.url('avatars/me.jpg', { width: 300, height: 300, crop: 'cover', format: 'webp' });
-    expect(url).toBe('http://localhost:7100/v1/image/w_300,h_300,c_cover,f_webp/avatars/me.jpg');
+    expect(url).toBe('http://localhost:7100/image/upload/w_300,h_300,c_cover,f_webp/avatars/me.webp');
   });
 
   it('exposes Cloudinary-compatible namespaces uploader and api', () => {

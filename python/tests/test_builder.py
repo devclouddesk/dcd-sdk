@@ -13,13 +13,26 @@ class TestTransformationBuilder(unittest.TestCase):
         )
         self.assertEqual(
             url,
-            "http://localhost:7100/v1/image/w_400,h_400,c_fill,f_webp,q_85/avatars/user.jpg",
+            "http://localhost:7100/image/upload/w_400,h_400,c_fill,f_webp,q_85/avatars/user.webp",
+        )
+
+    def test_cloudinary_mode(self):
+        builder = TransformationBuilder("http://localhost:7100", "products/shoes.jpg")
+        url = (
+            builder.cloudinary_mode()
+            .resize(width=800, height=600, crop="fill")
+            .format("webp")
+            .to_string()
+        )
+        self.assertEqual(
+            url,
+            "http://localhost:7100/image/upload/w_800,h_600,c_fill,f_webp/products/shoes.webp",
         )
 
     def test_original_when_no_transformation(self):
         builder = TransformationBuilder("http://localhost:7100", "docs/file.pdf")
         self.assertEqual(builder.to_params_string(), "original")
-        self.assertEqual(builder.to_string(), "http://localhost:7100/v1/image/docs/file.pdf")
+        self.assertEqual(builder.to_string(), "http://localhost:7100/image/upload/docs/file.pdf")
 
     def test_all_effects(self):
         builder = TransformationBuilder("http://localhost:7100", "sample.png")
@@ -32,13 +45,13 @@ class TestTransformationBuilder(unittest.TestCase):
         )
         self.assertEqual(
             url,
-            "http://localhost:7100/v1/image/e_blur_5,e_gray,e_sharp,r_90/sample.png",
+            "http://localhost:7100/image/upload/e_blur_5,e_gray,e_sharp,r_90/sample.png",
         )
 
     def test_slash_handling(self):
         builder = TransformationBuilder("http://localhost:7100///", "///assets/pic.webp")
         url = builder.format("avif").to_string()
-        self.assertEqual(url, "http://localhost:7100/v1/image/f_avif/assets/pic.webp")
+        self.assertEqual(url, "http://localhost:7100/image/upload/f_avif/assets/pic.avif")
 
 
 if __name__ == "__main__":

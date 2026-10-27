@@ -85,6 +85,7 @@ class StorageClient:
         endpoint: Optional[str] = None,
         api_key: Optional[str] = None,
         timeout: float = 30.0,
+        delivery_prefix: str = "image/upload",
     ):
         env_endpoint = os.getenv("DCD_STORAGE_ENDPOINT", "")
         env_api_key = os.getenv("DCD_STORAGE_API_KEY", os.getenv("DCD_API_KEY", ""))
@@ -96,6 +97,7 @@ class StorageClient:
         self.endpoint = resolved_endpoint.rstrip("/")
         self.api_key = (api_key or env_api_key or "").strip()
         self.timeout = float(timeout)
+        self.delivery_prefix = (delivery_prefix or "image/upload").strip("/") or "image/upload"
 
         # Cloudinary-compatible namespaces
         self.uploader = _UploaderNamespace(self)
@@ -104,7 +106,7 @@ class StorageClient:
     def get_public_url(self, public_id: str) -> str:
         """Directly returns the direct public CDN URL for an asset without transformation boilerplate."""
         clean = public_id.lstrip("/")
-        return f"{self.endpoint}/v1/image/{clean}"
+        return f"{self.endpoint}/{self.delivery_prefix}/{clean}"
 
     def url(self, public_id: str, **kwargs) -> Union[TransformationBuilder, str]:
         """
@@ -116,7 +118,7 @@ class StorageClient:
         Example (direct options):
             client.url("avatars/user-1", width=300, height=300, crop="fill", format="webp")
         """
-        builder = TransformationBuilder(self.endpoint, public_id)
+        builder = TransformationBuilder(self.endpoint, public_id, delivery_prefix=self.delivery_prefix)
         if not kwargs:
             return builder
 

@@ -51,7 +51,7 @@ class TestStorageClient(unittest.TestCase):
         client = StorageClient()
         self.assertEqual(client.endpoint, "http://localhost:7100")
         self.assertEqual(client.api_key, "sk_test_123")
-        self.assertEqual(client.get_public_url("avatars/me.jpg"), "http://localhost:7100/v1/image/avatars/me.jpg")
+        self.assertEqual(client.get_public_url("avatars/me.jpg"), "http://localhost:7100/image/upload/avatars/me.jpg")
 
     def test_missing_endpoint_raises(self):
         with self.assertRaises(ValueError):

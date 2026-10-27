@@ -16,119 +16,115 @@ High-performance, Cloudinary-compatible dynamic image transformations, uploads, 
 pip install dcd-storage-client
 ```
 
-> **Zero External Dependencies**: Works out-of-the-box with standard Python 3.8+ (`urllib` based). Instant installation without dependency version conflicts!
+> **Zero External Dependencies**: Works out-of-the-box with standard Python 3.8+ (`urllib` based). Instant installation without dependency conflicts!
 
 ---
 
-## 🚀 Quickstart
+## ⚡ Basic Use Case (In 30 Seconds)
 
-### 1. Initialize Client
+Upload an image and generate an on-the-fly optimized WebP thumbnail:
 
 ```python
 from dcd_storage_client import StorageClient
 
-# Explicit configuration or auto-detected from DCD_STORAGE_ENDPOINT & DCD_STORAGE_API_KEY
+# 1. Initialize client
 client = StorageClient(
-    endpoint="http://YOUR_SERVER_IP:7100",  # Or custom domain: https://storage.yourdomain.com
+    endpoint="http://YOUR_SERVER_IP:7100",  # or custom domain: https://cdn.yourdomain.com
     api_key="dcd_key_live_xxxxxxxxxxxx",    # API key from DevCloudDesk dashboard
 )
-```
 
----
+# 2. Upload an image (supports filepath, bytes, or file stream)
+asset = client.upload("avatar.png", folder="users")
+print("Original URL:", asset["url"])
 
-### 2. Upload Files
-
-Upload from a local filepath, binary bytes, or file stream:
-
-```python
-# Upload local file
-asset = client.upload("profile.png", folder="avatars")
-print("Public ID:", asset["publicId"])
-print("CDN URL:", asset["url"])
-print("Direct URL:", client.get_public_url(asset["publicId"]))
-
-# Upload raw bytes or stream (e.g. in FastAPI or Flask)
-asset = client.upload(
-    file=image_bytes,
-    folder="reports",
-    filename="statement.pdf",
-    overwrite=True
-)
-
-# Cloudinary-compatible namespace style also supported:
-client.uploader.upload("banner.png", folder="marketing")
-client.uploader.destroy(asset["publicId"])
-```
-
----
-
-### 3. Dynamic On-The-Fly Transformations
-
-Generate real-time optimized WebP/AVIF images with automatic resizing, blur, and sharpening:
-
-```python
-avatar_url = (
+# 3. Generate instant on-the-fly WebP thumbnail
+thumbnail_url = (
     client.url(asset["publicId"])
-    .resize(width=400, height=400, crop="fill")
+    .resize(width=300, height=300, crop="fill")
     .format("webp")
-    .quality(85)
-    .blur(4)
+    .quality(80)
     .to_string()
 )
 
-print(avatar_url)
-# => http://YOUR_SERVER_IP:7100/v1/image/w_400,h_400,c_fill,f_webp,q_85,e_blur_4/avatars/user-123.webp
+print("Thumbnail URL:", thumbnail_url)
+# => http://YOUR_SERVER_IP:7100/image/upload/w_300,h_300,c_fill,f_webp,q_80/users/avatar.webp
 ```
 
-#### Transformation Options Reference
+---
 
-| Method | Parameters | Description |
+## 📖 Complete API Reference (All Functions)
+
+The `StorageClient` instance provides the following core methods:
+
+### 1. Upload & Delivery
+
+| Function | Signature | Description |
 | :--- | :--- | :--- |
-| `.resize(width, height, crop)` | `int, int, str` | Resizes image dimension with crop strategy (`fill`, `fit`, `crop`, `scale`) |
-| `.crop(mode)` | `'fill' \| 'fit' \| 'crop' \| 'scale'` | Crop strategy |
-| `.format(fmt)` | `'auto' \| 'webp' \| 'avif' \| 'jpeg' \| 'png'` | Output image format |
-| `.quality(q)` | `int (1-100)` | Compression quality |
-| `.blur(sigma)` | `int (1-100)` | Applies Gaussian blur filter |
-| `.grayscale()` | `bool` | Converts image to grayscale |
-| `.sharpen()` | `bool` | Sharpens image edges |
-| `.rotation(deg)` | `int \| 'auto'` | Rotates image by degrees (e.g. 90, 180, 270) |
+| `upload(file, ...)` | `(file, folder="", filename=None, overwrite=True, access="public") -> dict` | Uploads file (path, bytes, or stream) to storage with auto format detection. |
+| `url(public_id)` | `(public_id: str) -> TransformationBuilder` | Creates a chainable builder for on-the-fly image transformations. |
+| `get_public_url(public_id)` | `(public_id: str) -> str` | Directly returns public CDN URL for an asset without transformation parameters. |
+| `get_signed_url(public_id, ...)` | `(public_id: str, expires_in_seconds=300, resource_type="image") -> str` | Generates a cryptographically signed URL to access private assets securely. |
 
----
+### 2. Client-Side Uploads (Zero Secret Exposure)
 
-### 4. Client-Side Uploads via Signed Tokens (Zero Secret Exposure)
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `create_signed_upload_token(...)` | `(folder=None, max_bytes=None, expires_in_seconds=300, access="public") -> dict` | Generates a short-lived token for safe browser/mobile client uploads. |
+| `upload_with_token(file, token, ...)` | `(file, token: str, filename=None) -> dict` | Uploads a file directly using only a signed upload token (no secret API key required). |
 
-Keep your master API keys safely on your backend server. Generate short-lived, tamper-proof signed upload tokens for your frontend React/Next.js/Mobile clients:
+### 3. File & Folder Management
+
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `list_files(...)` | `(folder=None, page=1, limit=50) -> dict` | Lists stored files with pagination (`page`, `limit`) and folder filtering. |
+| `get_file(public_id)` | `(public_id: str) -> dict` | Retrieves full metadata and details for a single asset by its `publicId`. |
+| `update_access(public_id, access)` | `(public_id: str, access="public" \| "private") -> dict` | Toggles an asset's access mode between `"public"` and `"private"`. |
+| `delete(public_id)` | `(public_id: str) -> bool` | Permanently deletes an asset and automatically purges its transformed variants. |
+
+### 4. Server Maintenance & Stats
+
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `get_stats()` | `() -> dict` | Retrieves real-time storage metrics (files count, storage bytes, cache size, uptime). |
+| `purge_cache()` | `() -> int` | Purges all cached image transformation variants from the server disk. |
+| `health_check()` | `() -> dict` | Checks whether the storage cluster is online and healthy. |
+
+### 5. Cloudinary Compatibility Namespaces
+
+Drop-in migration for existing Cloudinary codebases:
 
 ```python
-# Generate short-lived upload token in your FastAPI / Django / Flask endpoint
-token_data = client.create_signed_upload_token(
-    folder="client-uploads",
-    expires_in_seconds=300,        # 5 minutes
-    max_bytes=10 * 1024 * 1024,   # 10 MB limit
-)
-print("Client Upload Token:", token_data["token"])
+# Uploader namespace
+client.uploader.upload("photo.jpg", folder="photos")
+client.uploader.destroy("photos/sample")
 
-# Client or script can upload using ONLY the token (zero API key exposure)
-client.upload_with_token(file_bytes, token=token_data["token"])
+# Admin API namespace
+file_meta = client.api.resource("photos/sample")
+files_list = client.api.resources(folder="photos", limit=50)
+usage_stats = client.api.usage()
 ```
 
 ---
 
-### 5. List Files & Server Stats
+## 🎨 Image Transformation Methods
 
-```python
-# List files in a folder
-files = client.list_files(folder="avatars", page=1, limit=20)
-print(f"Total files: {files['data']['pagination']['total']}")
+When using `client.url(public_id)`, chain any of these transformation methods:
 
-# Server metrics
-stats = client.get_stats()
-print(f"Total bytes: {stats['totalStorageBytes']}, Driver: {stats['storageDriver']}")
-```
+| Method | Example | Description |
+| :--- | :--- | :--- |
+| `.resize(width, height, crop)` | `.resize(400, 400, "fill")` | Resizes dimension with crop mode (`fill`, `fit`, `crop`, `scale`). |
+| `.crop(mode)` | `.crop("fill")` | Sets crop strategy (`fill`, `fit`, `crop`, `scale`). |
+| `.format(fmt)` | `.format("webp")` | Output format: `"auto"`, `"webp"`, `"avif"`, `"jpeg"`, `"png"`. |
+| `.quality(q)` | `.quality(80)` | Compression quality (`1` to `100`). |
+| `.blur(sigma)` | `.blur(4)` | Applies Gaussian blur filter (`1` to `100`). |
+| `.grayscale()` | `.grayscale()` | Converts image to black and white. |
+| `.sharpen()` | `.sharpen()` | Enhances edge sharpness. |
+| `.rotation(deg)` | `.rotation(90)` | Rotates image by degrees (`90`, `180`, `270`, `"auto"`). |
+| `.to_string()` / `.build()` | `.to_string()` | Returns the final transformed CDN URL string. |
 
 ---
 
-### 6. Robust Error Handling
+## 🛡️ Error Handling
 
 ```python
 from dcd_storage_client import (
@@ -140,13 +136,13 @@ from dcd_storage_client import (
 )
 
 try:
-    client.upload("large_video.mp4")
+    client.upload("large_file.zip")
 except AuthenticationError as e:
-    print("Authentication failed. Check API key:", e)
+    print("Invalid API Key:", e)
 except PayloadTooLargeError as e:
-    print("File size exceeds limit:", e)
-except UploadError as e:
-    print("Upload failed:", e)
+    print("File exceeds size limit:", e)
+except StorageError as e:
+    print("Storage error:", e)
 ```
 
 ---

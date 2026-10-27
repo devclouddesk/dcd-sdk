@@ -1,13 +1,22 @@
 import type { CropMode, OutputFormat, TransformationOptions } from './types.js';
 
+const KNOWN_IMAGE_EXTS = /\.(jpg|jpeg|png|webp|avif|gif|tiff|svg|bmp)$/i;
+
 export class TransformationBuilder {
   private endpoint: string;
   private publicId: string;
   private options: TransformationOptions = {};
+  private deliveryPrefix: string = 'image/upload';
 
-  constructor(endpoint: string, publicId: string, initialOptions?: TransformationOptions) {
+  constructor(
+    endpoint: string,
+    publicId: string,
+    initialOptions?: TransformationOptions,
+    deliveryPrefix: string = 'image/upload'
+  ) {
     this.endpoint = endpoint.replace(/\/+$/, '');
     this.publicId = publicId.replace(/^\/+/, '');
+    this.deliveryPrefix = (deliveryPrefix || 'image/upload').replace(/^\/+|\/+$/g, '');
     if (initialOptions) {
       const opts: TransformationOptions = { ...initialOptions };
       if (opts.w && !opts.width) opts.width = opts.w;
@@ -17,6 +26,22 @@ export class TransformationBuilder {
       if (opts.q && !opts.quality) opts.quality = opts.q;
       this.options = opts;
     }
+  }
+
+  /**
+   * Configure delivery URL path prefix (e.g. 'v1/image', 'image/upload', 'cdn')
+   */
+  prefix(pathPrefix: 'v1/image' | 'image/upload' | 'cdn' | string): this {
+    this.deliveryPrefix = pathPrefix.replace(/^\/+|\/+$/g, '');
+    return this;
+  }
+
+  /**
+   * Switch to 1:1 Cloudinary delivery path format (/image/upload/...)
+   */
+  cloudinaryMode(): this {
+    this.deliveryPrefix = 'image/upload';
+    return this;
   }
 
   width(w: number): this {
@@ -91,14 +116,26 @@ export class TransformationBuilder {
   }
 
   /**
-   * Returns the final full URL string
+   * Returns the final full URL string with proper file extension
    */
   build(): string {
     const params = this.toParamsString();
-    if (params === 'original') {
-      return `${this.endpoint}/v1/image/${this.publicId}`;
+    let finalPublicId = this.publicId;
+
+    // Cloudinary standard: If a specific format was selected, ensure URL ends with that extension
+    if (this.options.format && this.options.format !== 'auto') {
+      const targetExt = this.options.format === 'jpeg' ? 'jpg' : this.options.format;
+      if (KNOWN_IMAGE_EXTS.test(finalPublicId)) {
+        finalPublicId = finalPublicId.replace(KNOWN_IMAGE_EXTS, `.${targetExt}`);
+      } else {
+        finalPublicId = `${finalPublicId}.${targetExt}`;
+      }
     }
-    return `${this.endpoint}/v1/image/${params}/${this.publicId}`;
+
+    if (params === 'original') {
+      return `${this.endpoint}/${this.deliveryPrefix}/${finalPublicId}`;
+    }
+    return `${this.endpoint}/${this.deliveryPrefix}/${params}/${finalPublicId}`;
   }
 
   toString(): string {
